@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Biome check (lint + format)
-        run: bun run lint:check
+      - name: Biome check
+        run: bunx @biomejs/biome check .
 
   typecheck:
     name: Type Check
@@ -43,8 +43,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: TypeScript type check
-        run: bun run typecheck
+      - name: TypeScript check
+        run: bunx tsc --noEmit
 
   test:
     name: Tests
