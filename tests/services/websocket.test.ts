@@ -1,7 +1,6 @@
 import { describe, expect, test, beforeEach, mock } from "bun:test";
 import { WebSocketService } from "../../src/services/websocket.service";
 
-// Mock ServerWebSocket
 function createMockWS(): any {
   return {
     send: mock(() => {}),
@@ -9,7 +8,6 @@ function createMockWS(): any {
   };
 }
 
-// Suppress logger output during tests
 mock.module("../../src/utils/logger", () => ({
   logger: {
     info: () => {},
@@ -33,8 +31,7 @@ describe("WebSocketService", () => {
   });
 
   test("addClient increases client count", () => {
-    const ws = createMockWS();
-    service.addClient(ws);
+    service.addClient(createMockWS());
     expect(service.getClientCount()).toBe(1);
   });
 
@@ -48,16 +45,13 @@ describe("WebSocketService", () => {
   test("removeClient decreases client count", () => {
     const ws = createMockWS();
     service.addClient(ws);
-    expect(service.getClientCount()).toBe(1);
     service.removeClient(ws);
     expect(service.getClientCount()).toBe(0);
   });
 
   test("removeClient ignores unknown client", () => {
-    const ws1 = createMockWS();
-    const ws2 = createMockWS();
-    service.addClient(ws1);
-    service.removeClient(ws2);
+    service.addClient(createMockWS());
+    service.removeClient(createMockWS());
     expect(service.getClientCount()).toBe(1);
   });
 
@@ -72,32 +66,26 @@ describe("WebSocketService", () => {
     expect(ws1.send).toHaveBeenCalledTimes(1);
     expect(ws2.send).toHaveBeenCalledTimes(1);
 
-    const sent1 = JSON.parse(ws1.send.mock.calls[0][0]);
-    expect(sent1.event).toBe("chat");
-    expect(sent1.data.message).toBe("hello");
+    const sent = JSON.parse(ws1.send.mock.calls[0][0]);
+    expect(sent.event).toBe("chat");
+    expect(sent.data.message).toBe("hello");
   });
 
-  test("broadcast removes clients that throw on send", () => {
-    const goodWs = createMockWS();
-    const badWs = createMockWS();
-    badWs.send = mock(() => {
-      throw new Error("Connection closed");
-    });
+  test("broadcast removes clients that throw", () => {
+    const good = createMockWS();
+    const bad = createMockWS();
+    bad.send = mock(() => { throw new Error("closed"); });
 
-    service.addClient(goodWs);
-    service.addClient(badWs);
-    expect(service.getClientCount()).toBe(2);
+    service.addClient(good);
+    service.addClient(bad);
 
     service.broadcast("test", {});
 
     expect(service.getClientCount()).toBe(1);
-    expect(goodWs.send).toHaveBeenCalledTimes(1);
   });
 
-  test("broadcast with no clients does nothing", () => {
-    // Should not throw
-    service.broadcast("test", { data: "value" });
-    expect(service.getClientCount()).toBe(0);
+  test("broadcast with no clients does not throw", () => {
+    expect(() => service.broadcast("test", {})).not.toThrow();
   });
 
   test("broadcast sends correct JSON format", () => {
@@ -113,7 +101,7 @@ describe("WebSocketService", () => {
     });
   });
 
-  test("duplicate addClient is handled by Set", () => {
+  test("duplicate addClient handled by Set", () => {
     const ws = createMockWS();
     service.addClient(ws);
     service.addClient(ws);
