@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Chat Reader</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- ======== Header ======== -->
+    <header class="header">
+      <div class="header-content">
+        <h1 class="logo">
+          <span class="logo-icon">🎵</span>
+          <span class="logo-text">TikTok Chat Reader</span>
+        </h1>
+        <div class="connection-form">
+          <div class="input-group">
+            <span class="input-prefix">@</span>
+            <input
+              type="text"
+              id="usernameInput"
+              placeholder="TikTok username"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <button id="connectBtn" class="btn btn-primary">Connect</button>
+          <button id="disconnectBtn" class="btn btn-danger hidden">Disconnect</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ======== Status Bar ======== -->
+    <div class="status-bar">
+      <div class="status-left">
+        <div class="status-indicator">
+          <span class="status-dot" id="statusDot"></span>
+          <span class="status-text" id="statusText">Not connected</span>
+        </div>
+      </div>
+      <div class="stats hidden" id="statsContainer">
+        <div class="stat" title="Viewers">
+          <span class="stat-icon">👁️</span>
+          <span class="stat-value" id="viewerCount">0</span>
+        </div>
+        <div class="stat" title="Likes">
+          <span class="stat-icon">❤️</span>
+          <span class="stat-value" id="likeCount">0</span>
+        </div>
+        <div class="stat" title="Diamonds">
+          <span class="stat-icon">💎</span>
+          <span class="stat-value" id="diamondCount">0</span>
+        </div>
+        <div class="stat" title="Gifts">
+          <span class="stat-icon">🎁</span>
+          <span class="stat-value" id="giftCount">0</span>
+        </div>
+        <div class="stat" title="Chat Messages">
+          <span class="stat-icon">💬</span>
+          <span class="stat-value" id="chatMsgCount">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Filter Bar ======== -->
+    <div class="filter-bar">
+      <div class="filter-toggles">
+        <label class="toggle-switch" title="Show chat messages">
+          <input type="checkbox" id="toggleChat" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">💬 Chat</span>
+        </label>
+        <label class="toggle-switch" title="Show gifts">
+          <input type="checkbox" id="toggleGift" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">🎁 Gifts</span>
+        </label>
+        <label class="toggle-switch" title="Show likes">
+          <input type="checkbox" id="toggleLike" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">❤️ Likes</span>
+        </label>
+        <label class="toggle-switch" title="Show follows">
+          <input type="checkbox" id="toggleFollow" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">➕ Follows</span>
+        </label>
+        <label class="toggle-switch" title="Show shares">
+          <input type="checkbox" id="toggleShare" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">🔗 Shares</span>
+        </label>
+        <label class="toggle-switch" title="Show joins">
+          <input type="checkbox" id="toggleJoin" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">👋 Joins</span>
+        </label>
+      </div>
+      <div class="filter-inputs">
+        <div class="filter-input-group">
+          <span class="filter-icon">🔍</span>
+          <input
+            type="text"
+            id="textFilter"
+            placeholder="Filter messages..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="filter-clear-btn hidden" id="clearTextFilter" title="Clear filter">✕</button>
+        </div>
+        <div class="filter-input-group">
+          <span class="filter-icon">👤</span>
+          <input
+            type="text"
+            id="usernameFilter"
+            placeholder="Filter by username..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="filter-clear-btn hidden" id="clearUsernameFilter" title="Clear filter">✕</button>
+        </div>
+        <div class="filter-input-group filter-small">
+          <span class="filter-icon">💎</span>
+          <input
+            type="number"
+            id="minDiamondFilter"
+            placeholder="Min 💎"
+            min="0"
+            value="0"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== Main Content ======== -->
+    <main class="main-content">
+      <!-- Chat Panel -->
+      <div class="panel chat-panel">
+        <div class="panel-header">
+          <h2>💬 Chat</h2>
+          <div class="panel-actions">
+            <span class="msg-counter" id="chatCounter">0 messages</span>
+            <button class="btn btn-sm btn-ghost" id="clearChatBtn" title="Clear chat">🗑️</button>
+          </div>
+        </div>
+        <div class="panel-body" id="chatContainer">
+          <div class="empty-state" id="chatEmptyState">
+            <div class="empty-icon">💬</div>
+            <p>Connect to a TikTok Live to see chat messages</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Events Panel -->
+      <div class="panel events-panel">
+        <div class="panel-header">
+          <h2>🎯 Events</h2>
+          <div class="panel-actions">
+            <span class="msg-counter" id="eventsCounter">0 events</span>
+            <button class="btn btn-sm btn-ghost" id="clearEventsBtn" title="Clear events">🗑️</button>
+          </div>
+        </div>
+        <div class="panel-body" id="eventsContainer">
+          <div class="empty-state" id="eventsEmptyState">
+            <div class="empty-icon">🎯</div>
+            <p>Gifts, follows, shares, and joins will appear here</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/js/toast.js"></script>
+  <script src="/js/filters.js"></script>
+  <script src="/js/socket.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
