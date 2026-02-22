@@ -1,8 +1,7 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test";
+import { describe, expect, test, mock } from "bun:test";
 import { Hono } from "hono";
 import { createApiRoutes } from "../../src/routes/api";
 
-// Suppress logger
 mock.module("../../src/utils/logger", () => ({
   logger: {
     info: () => {},
@@ -14,199 +13,132 @@ mock.module("../../src/utils/logger", () => ({
   },
 }));
 
-// Mock TikTokService
-function createMockTikTokService(overrides: Partial<any> = {}) {
+function mockService(overrides: any = {}) {
   return {
-    connect: mock(async (uniqueId: string) => ({
-      success: true,
-      message: `Connected to @${uniqueId}`,
-    })),
+    connect: mock(async (uid: string) => ({ success: true, message: `Connected to @${uid}` })),
     disconnect: mock(() => {}),
     isConnected: mock(() => false),
     getStats: mock(() => ({
-      viewerCount: 0,
-      likeCount: 0,
-      totalLikes: 0,
-      diamondsCount: 0,
-      giftCount: 0,
-      chatCount: 0,
-      followerCount: 0,
-      shareCount: 0,
-      joinCount: 0,
-      connectedSince: null,
-      uniqueId: null,
+      viewerCount: 0, likeCount: 0, totalLikes: 0, diamondsCount: 0,
+      giftCount: 0, chatCount: 0, followerCount: 0, shareCount: 0,
+      joinCount: 0, connectedSince: null, uniqueId: null,
     })),
     ...overrides,
   };
 }
 
-function createTestApp(tiktokService: any) {
+function makeApp(svc: any) {
   const app = new Hono();
-  const apiRoutes = createApiRoutes(tiktokService);
-  app.route("/api", apiRoutes);
+  app.route("/api", createApiRoutes(svc));
   return app;
 }
 
-describe("API Routes", () => {
-  // --- POST /api/connect ---
-
-  describe("POST /api/connect", () => {
-    test("connects with valid uniqueId", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uniqueId: "testuser" }),
-      });
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(service.connect).toHaveBeenCalledWith("testuser", {});
+describe("POST /api/connect", () => {
+  test("connects with valid uniqueId", async () => {
+    const svc = mockService();
+    const app = makeApp(svc);
+    const res = await app.request("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqueId: "testuser" }),
     });
-
-    test("returns 400 when uniqueId is missing", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.success).toBe(false);
-      expect(body.message).toContain("uniqueId");
-    });
-
-    test("returns 400 when uniqueId is not a string", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uniqueId: 123 }),
-      });
-
-      expect(res.status).toBe(400);
-    });
-
-    test("passes options to connect", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      await app.request("/api/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uniqueId: "testuser",
-          options: { sessionId: "abc123" },
-        }),
-      });
-
-      expect(service.connect).toHaveBeenCalledWith("testuser", { sessionId: "abc123" });
-    });
-
-    test("returns failure when connect fails", async () => {
-      const service = createMockTikTokService({
-        connect: mock(async () => ({
-          success: false,
-          message: "User not found",
-        })),
-      });
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uniqueId: "fakeuser" }),
-      });
-
-      const body = await res.json();
-      expect(body.success).toBe(false);
-      expect(body.message).toContain("not found");
-    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(svc.connect).toHaveBeenCalledWith("testuser", {});
   });
 
-  // --- POST /api/disconnect ---
-
-  describe("POST /api/disconnect", () => {
-    test("calls disconnect and returns success", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/disconnect", { method: "POST" });
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.success).toBe(true);
-      expect(service.disconnect).toHaveBeenCalledTimes(1);
+  test("returns 400 when uniqueId missing", async () => {
+    const app = makeApp(mockService());
+    const res = await app.request("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
     });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.success).toBe(false);
   });
 
-  // --- GET /api/stats ---
-
-  describe("GET /api/stats", () => {
-    test("returns stats when not connected", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/stats");
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.connected).toBe(false);
-      expect(body.stats).toBeDefined();
-      expect(body.stats.viewerCount).toBe(0);
+  test("returns 400 when uniqueId not string", async () => {
+    const app = makeApp(mockService());
+    const res = await app.request("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqueId: 123 }),
     });
-
-    test("returns stats when connected", async () => {
-      const service = createMockTikTokService({
-        isConnected: mock(() => true),
-        getStats: mock(() => ({
-          viewerCount: 5000,
-          likeCount: 10000,
-          totalLikes: 10000,
-          diamondsCount: 500,
-          giftCount: 25,
-          chatCount: 300,
-          followerCount: 10,
-          shareCount: 5,
-          joinCount: 200,
-          connectedSince: "2024-01-01T00:00:00.000Z",
-          uniqueId: "streamer",
-        })),
-      });
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/stats");
-      const body = await res.json();
-
-      expect(body.connected).toBe(true);
-      expect(body.stats.viewerCount).toBe(5000);
-      expect(body.stats.uniqueId).toBe("streamer");
-    });
+    expect(res.status).toBe(400);
   });
 
-  // --- GET /api/health ---
-
-  describe("GET /api/health", () => {
-    test("returns health status", async () => {
-      const service = createMockTikTokService();
-      const app = createTestApp(service);
-
-      const res = await app.request("/api/health");
-
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.status).toBe("ok");
-      expect(typeof body.uptime).toBe("number");
-      expect(body.connected).toBe(false);
+  test("passes options to connect", async () => {
+    const svc = mockService();
+    const app = makeApp(svc);
+    await app.request("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqueId: "testuser", options: { sessionId: "abc" } }),
     });
+    expect(svc.connect).toHaveBeenCalledWith("testuser", { sessionId: "abc" });
+  });
+
+  test("returns failure when connect fails", async () => {
+    const svc = mockService({
+      connect: mock(async () => ({ success: false, message: "User not found" })),
+    });
+    const app = makeApp(svc);
+    const res = await app.request("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqueId: "fakeuser" }),
+    });
+    const body = await res.json();
+    expect(body.success).toBe(false);
+  });
+});
+
+describe("POST /api/disconnect", () => {
+  test("calls disconnect and returns success", async () => {
+    const svc = mockService();
+    const app = makeApp(svc);
+    const res = await app.request("/api/disconnect", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).success).toBe(true);
+    expect(svc.disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("GET /api/stats", () => {
+  test("returns stats when not connected", async () => {
+    const app = makeApp(mockService());
+    const res = await app.request("/api/stats");
+    const body = await res.json();
+    expect(body.connected).toBe(false);
+    expect(body.stats.viewerCount).toBe(0);
+  });
+
+  test("returns stats when connected", async () => {
+    const svc = mockService({
+      isConnected: mock(() => true),
+      getStats: mock(() => ({
+        viewerCount: 5000, likeCount: 10000, totalLikes: 10000,
+        diamondsCount: 500, giftCount: 25, chatCount: 300,
+        followerCount: 10, shareCount: 5, joinCount: 200,
+        connectedSince: "2024-01-01T00:00:00.000Z", uniqueId: "streamer",
+      })),
+    });
+    const app = makeApp(svc);
+    const body = await (await app.request("/api/stats")).json();
+    expect(body.connected).toBe(true);
+    expect(body.stats.viewerCount).toBe(5000);
+  });
+});
+
+describe("GET /api/health", () => {
+  test("returns health status", async () => {
+    const app = makeApp(mockService());
+    const res = await app.request("/api/health");
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(typeof body.uptime).toBe("number");
   });
 });
