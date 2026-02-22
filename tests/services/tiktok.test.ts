@@ -2,7 +2,6 @@ import { describe, expect, test, beforeEach, mock } from "bun:test";
 import { WebSocketService } from "../../src/services/websocket.service";
 import { TikTokService } from "../../src/services/tiktok.service";
 
-// Suppress logger
 mock.module("../../src/utils/logger", () => ({
   logger: {
     info: () => {},
@@ -14,7 +13,6 @@ mock.module("../../src/utils/logger", () => ({
   },
 }));
 
-// Mock tiktok-live-connector
 let mockConnectResult: any = { roomId: "12345" };
 let mockConnectShouldFail = false;
 let mockConnectError = new Error("LIVE has ended");
@@ -22,25 +20,12 @@ const mockEventHandlers: Record<string, Function> = {};
 
 mock.module("tiktok-live-connector", () => ({
   WebcastPushConnection: class {
-    uniqueId: string;
-    options: any;
-
-    constructor(uniqueId: string, options: any) {
-      this.uniqueId = uniqueId;
-      this.options = options;
-    }
-
-    on(event: string, handler: Function) {
-      mockEventHandlers[event] = handler;
-    }
-
+    constructor(_uid: string, _opts: any) {}
+    on(event: string, handler: Function) { mockEventHandlers[event] = handler; }
     async connect() {
-      if (mockConnectShouldFail) {
-        throw mockConnectError;
-      }
+      if (mockConnectShouldFail) throw mockConnectError;
       return mockConnectResult;
     }
-
     disconnect() {}
   },
 }));
@@ -48,93 +33,86 @@ mock.module("tiktok-live-connector", () => ({
 describe("TikTokService", () => {
   let wsService: WebSocketService;
   let tiktokService: TikTokService;
-  let broadcastCalls: Array<{ event: string; data: any }>;
+  let broadcasts: Array<{ event: string; data: any }>;
 
   beforeEach(() => {
     wsService = new WebSocketService();
-    broadcastCalls = [];
-
-    // Spy on broadcast
-    const originalBroadcast = wsService.broadcast.bind(wsService);
+    broadcasts = [];
+    const orig = wsService.broadcast.bind(wsService);
     wsService.broadcast = (event: string, data: any) => {
-      broadcastCalls.push({ event, data });
-      originalBroadcast(event, data);
+      broadcasts.push({ event, data });
+      orig(event, data);
     };
-
     tiktokService = new TikTokService(wsService);
     mockConnectShouldFail = false;
     mockConnectResult = { roomId: "12345" };
-
-    // Clear event handlers
-    Object.keys(mockEventHandlers).forEach((key) => delete mockEventHandlers[key]);
+    Object.keys(mockEventHandlers).forEach((k) => delete mockEventHandlers[k]);
   });
 
-  // --- Connection ---
+  // Connection
 
   test("starts not connected", () => {
     expect(tiktokService.isConnected()).toBe(false);
   });
 
   test("connect succeeds with valid username", async () => {
-    const result = await tiktokService.connect("testuser");
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("testuser");
+    const r = await tiktokService.connect("testuser");
+    expect(r.success).toBe(true);
+    expect(r.message).toContain("testuser");
     expect(tiktokService.isConnected()).toBe(true);
   });
 
   test("connect broadcasts connected event", async () => {
     await tiktokService.connect("testuser");
-    const connectedEvent = broadcastCalls.find((c) => c.event === "connected");
-    expect(connectedEvent).toBeDefined();
-    expect(connectedEvent!.data.uniqueId).toBe("testuser");
-    expect(connectedEvent!.data.roomId).toBe("12345");
+    const e = broadcasts.find((c) => c.event === "connected");
+    expect(e).toBeDefined();
+    expect(e!.data.uniqueId).toBe("testuser");
+    expect(e!.data.roomId).toBe("12345");
   });
 
   test("connect cleans @ from username", async () => {
-    const result = await tiktokService.connect("@testuser");
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("testuser");
+    const r = await tiktokService.connect("@testuser");
+    expect(r.success).toBe(true);
   });
 
   test("connect fails with empty username", async () => {
-    const result = await tiktokService.connect("");
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("valid username");
+    const r = await tiktokService.connect("");
+    expect(r.success).toBe(false);
+    expect(r.message).toContain("valid username");
   });
 
   test("connect fails with just @", async () => {
-    const result = await tiktokService.connect("@");
-    expect(result.success).toBe(false);
+    const r = await tiktokService.connect("@");
+    expect(r.success).toBe(false);
   });
 
   test("connect handles LIVE ended error", async () => {
     mockConnectShouldFail = true;
     mockConnectError = new Error("LIVE has ended");
-    const result = await tiktokService.connect("offlineuser");
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("live stream has ended");
+    const r = await tiktokService.connect("offlineuser");
+    expect(r.success).toBe(false);
+    expect(r.message).toContain("live stream has ended");
   });
 
   test("connect handles not found error", async () => {
     mockConnectShouldFail = true;
     mockConnectError = new Error("User not found 404");
-    const result = await tiktokService.connect("fakeuser");
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("not found");
+    const r = await tiktokService.connect("fakeuser");
+    expect(r.success).toBe(false);
+    expect(r.message).toContain("not found");
   });
 
   test("connect rate limits rapid attempts", async () => {
     await tiktokService.connect("user1");
-    const result = await tiktokService.connect("user2");
-    expect(result.success).toBe(false);
-    expect(result.message).toContain("wait");
+    const r = await tiktokService.connect("user2");
+    expect(r.success).toBe(false);
+    expect(r.message).toContain("wait");
   });
 
-  // --- Disconnect ---
+  // Disconnect
 
   test("disconnect sets isConnected to false", async () => {
     await tiktokService.connect("testuser");
-    expect(tiktokService.isConnected()).toBe(true);
     tiktokService.disconnect();
     expect(tiktokService.isConnected()).toBe(false);
   });
@@ -142,224 +120,149 @@ describe("TikTokService", () => {
   test("disconnect resets stats", async () => {
     await tiktokService.connect("testuser");
     tiktokService.disconnect();
-    const stats = tiktokService.getStats();
-    expect(stats.viewerCount).toBe(0);
-    expect(stats.uniqueId).toBeNull();
-    expect(stats.connectedSince).toBeNull();
+    const s = tiktokService.getStats();
+    expect(s.viewerCount).toBe(0);
+    expect(s.uniqueId).toBeNull();
+    expect(s.connectedSince).toBeNull();
   });
 
   test("disconnect when not connected does not throw", () => {
     expect(() => tiktokService.disconnect()).not.toThrow();
   });
 
-  // --- Stats ---
+  // Stats
 
-  test("getStats returns default stats initially", () => {
-    const stats = tiktokService.getStats();
-    expect(stats.viewerCount).toBe(0);
-    expect(stats.likeCount).toBe(0);
-    expect(stats.diamondsCount).toBe(0);
-    expect(stats.giftCount).toBe(0);
-    expect(stats.chatCount).toBe(0);
-    expect(stats.followerCount).toBe(0);
-    expect(stats.shareCount).toBe(0);
-    expect(stats.joinCount).toBe(0);
-    expect(stats.connectedSince).toBeNull();
-    expect(stats.uniqueId).toBeNull();
+  test("getStats returns defaults initially", () => {
+    const s = tiktokService.getStats();
+    expect(s.viewerCount).toBe(0);
+    expect(s.likeCount).toBe(0);
+    expect(s.diamondsCount).toBe(0);
+    expect(s.giftCount).toBe(0);
+    expect(s.chatCount).toBe(0);
+    expect(s.followerCount).toBe(0);
+    expect(s.shareCount).toBe(0);
+    expect(s.joinCount).toBe(0);
+    expect(s.connectedSince).toBeNull();
+    expect(s.uniqueId).toBeNull();
   });
 
   test("getStats returns copy not reference", () => {
-    const stats1 = tiktokService.getStats();
-    const stats2 = tiktokService.getStats();
-    expect(stats1).toEqual(stats2);
-    expect(stats1).not.toBe(stats2);
+    const a = tiktokService.getStats();
+    const b = tiktokService.getStats();
+    expect(a).toEqual(b);
+    expect(a).not.toBe(b);
   });
 
   test("stats update on connect", async () => {
     await tiktokService.connect("testuser");
-    const stats = tiktokService.getStats();
-    expect(stats.uniqueId).toBe("testuser");
-    expect(stats.connectedSince).not.toBeNull();
+    const s = tiktokService.getStats();
+    expect(s.uniqueId).toBe("testuser");
+    expect(s.connectedSince).not.toBeNull();
   });
 
-  // --- Event Handlers ---
+  // Events
 
   test("chat event increments chatCount and broadcasts", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["chat"]?.({
-      uniqueId: "viewer1",
-      nickname: "Viewer One",
-      profilePictureUrl: "https://example.com/pic.jpg",
-      comment: "Hello!",
-      followRole: 0,
-      userBadges: [],
-      isModerator: false,
-      isNewGifter: false,
-      isSubscriber: false,
-      topGifterRank: null,
-      teamMemberLevel: 0,
-      msgId: "msg1",
-      createTime: "123456",
+      uniqueId: "v1", nickname: "V1", profilePictureUrl: "",
+      comment: "Hello!", followRole: 0, userBadges: [],
+      isModerator: false, isNewGifter: false, isSubscriber: false,
+      topGifterRank: null, teamMemberLevel: 0, msgId: "m1", createTime: "0",
     });
-
     expect(tiktokService.getStats().chatCount).toBe(1);
-    const chatBroadcast = broadcastCalls.find((c) => c.event === "chat");
-    expect(chatBroadcast).toBeDefined();
-    expect(chatBroadcast!.data.comment).toBe("Hello!");
+    expect(broadcasts.find((c) => c.event === "chat")).toBeDefined();
   });
 
   test("gift event updates diamonds and giftCount", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["gift"]?.({
-      uniqueId: "gifter1",
-      nickname: "Gifter",
-      profilePictureUrl: "",
-      giftId: 1,
-      giftName: "Rose",
-      giftPictureUrl: "",
-      diamondCount: 1,
-      repeatCount: 5,
-      repeatEnd: true,
-      giftType: 1,
-      describe: "",
+      uniqueId: "g1", nickname: "G1", profilePictureUrl: "",
+      giftId: 1, giftName: "Rose", giftPictureUrl: "",
+      diamondCount: 1, repeatCount: 5, repeatEnd: true, giftType: 1, describe: "",
     });
-
-    const stats = tiktokService.getStats();
-    expect(stats.giftCount).toBe(1);
-    expect(stats.diamondsCount).toBe(5);
+    const s = tiktokService.getStats();
+    expect(s.giftCount).toBe(1);
+    expect(s.diamondsCount).toBe(5);
   });
 
   test("like event updates likeCount", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["like"]?.({
-      uniqueId: "liker1",
-      nickname: "Liker",
-      profilePictureUrl: "",
-      likeCount: 15,
-      totalLikeCount: 100,
+      uniqueId: "l1", nickname: "L1", profilePictureUrl: "",
+      likeCount: 15, totalLikeCount: 100,
     });
-
-    const stats = tiktokService.getStats();
-    expect(stats.totalLikes).toBe(15);
-    expect(stats.likeCount).toBe(100);
+    const s = tiktokService.getStats();
+    expect(s.totalLikes).toBe(15);
+    expect(s.likeCount).toBe(100);
   });
 
   test("member event increments joinCount", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["member"]?.({
-      uniqueId: "joiner1",
-      nickname: "Joiner",
-      profilePictureUrl: "",
-      actionId: 1,
+      uniqueId: "j1", nickname: "J1", profilePictureUrl: "", actionId: 1,
     });
-
     expect(tiktokService.getStats().joinCount).toBe(1);
   });
 
-  test("social follow event increments followerCount", async () => {
+  test("social follow increments followerCount", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["social"]?.({
-      uniqueId: "follower1",
-      nickname: "Follower",
-      profilePictureUrl: "",
-      displayType: "pm_mt_msg_viewer",
-      label: "followed",
+      uniqueId: "f1", nickname: "F1", profilePictureUrl: "",
+      displayType: "pm_mt_msg_viewer", label: "followed",
     });
-
     expect(tiktokService.getStats().followerCount).toBe(1);
-    const followBroadcast = broadcastCalls.find((c) => c.event === "follow");
-    expect(followBroadcast).toBeDefined();
+    expect(broadcasts.find((c) => c.event === "follow")).toBeDefined();
   });
 
-  test("social share event increments shareCount", async () => {
+  test("social share increments shareCount", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["social"]?.({
-      uniqueId: "sharer1",
-      nickname: "Sharer",
-      profilePictureUrl: "",
-      displayType: "pm_mt_msg_share",
-      label: "shared the live",
+      uniqueId: "s1", nickname: "S1", profilePictureUrl: "",
+      displayType: "pm_mt_msg_share", label: "shared the live",
     });
-
     expect(tiktokService.getStats().shareCount).toBe(1);
-    const shareBroadcast = broadcastCalls.find((c) => c.event === "share");
-    expect(shareBroadcast).toBeDefined();
+    expect(broadcasts.find((c) => c.event === "share")).toBeDefined();
   });
 
-  test("roomUser event updates viewerCount", async () => {
+  test("roomUser updates viewerCount", async () => {
     await tiktokService.connect("testuser");
-
-    mockEventHandlers["roomUser"]?.({
-      viewerCount: 1500,
-      topViewers: [],
-    });
-
+    mockEventHandlers["roomUser"]?.({ viewerCount: 1500, topViewers: [] });
     expect(tiktokService.getStats().viewerCount).toBe(1500);
   });
 
   test("streamEnd broadcasts streamEnd", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["streamEnd"]?.({ action: 3 });
-
-    const endBroadcast = broadcastCalls.find((c) => c.event === "streamEnd");
-    expect(endBroadcast).toBeDefined();
+    expect(broadcasts.find((c) => c.event === "streamEnd")).toBeDefined();
   });
 
-  test("multiple chat events increment counter correctly", async () => {
+  test("multiple chats increment correctly", async () => {
     await tiktokService.connect("testuser");
-
     for (let i = 0; i < 5; i++) {
       mockEventHandlers["chat"]?.({
-        uniqueId: `user${i}`,
-        nickname: `User ${i}`,
-        profilePictureUrl: "",
-        comment: `Message ${i}`,
-        followRole: 0,
-        userBadges: [],
-        msgId: `msg${i}`,
-        createTime: "123456",
+        uniqueId: `u${i}`, nickname: `U${i}`, profilePictureUrl: "",
+        comment: `msg${i}`, followRole: 0, userBadges: [],
+        msgId: `m${i}`, createTime: "0",
       });
     }
-
     expect(tiktokService.getStats().chatCount).toBe(5);
   });
 
   test("multiple gifts accumulate diamonds", async () => {
     await tiktokService.connect("testuser");
-
     mockEventHandlers["gift"]?.({
-      uniqueId: "g1",
-      nickname: "G1",
-      profilePictureUrl: "",
-      giftId: 1,
-      giftName: "Rose",
-      diamondCount: 1,
-      repeatCount: 10,
-      repeatEnd: true,
-      giftType: 1,
+      uniqueId: "g1", nickname: "G1", profilePictureUrl: "",
+      giftId: 1, giftName: "Rose", diamondCount: 1, repeatCount: 10,
+      repeatEnd: true, giftType: 1,
     });
-
     mockEventHandlers["gift"]?.({
-      uniqueId: "g2",
-      nickname: "G2",
-      profilePictureUrl: "",
-      giftId: 2,
-      giftName: "Lion",
-      diamondCount: 29999,
-      repeatCount: 1,
-      repeatEnd: true,
-      giftType: 1,
+      uniqueId: "g2", nickname: "G2", profilePictureUrl: "",
+      giftId: 2, giftName: "Lion", diamondCount: 29999, repeatCount: 1,
+      repeatEnd: true, giftType: 1,
     });
-
-    const stats = tiktokService.getStats();
-    expect(stats.giftCount).toBe(2);
-    expect(stats.diamondsCount).toBe(10 + 29999);
+    const s = tiktokService.getStats();
+    expect(s.giftCount).toBe(2);
+    expect(s.diamondsCount).toBe(10 + 29999);
   });
 });
