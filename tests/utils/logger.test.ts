@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
 import { logger } from "../../src/utils/logger";
 
 describe("logger", () => {
@@ -65,7 +65,6 @@ describe("logger", () => {
 
   test("includes timestamp", () => {
     logger.info("timestamped");
-    // Timestamp format: YYYY-MM-DD HH:MM:SS
     expect(logOutput[0]).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
   });
 });
