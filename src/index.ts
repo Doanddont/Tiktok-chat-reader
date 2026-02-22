@@ -1,0 +1,73 @@
+import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
+import { config } from "./config";
+import { WebSocketService } from "./services/websocket.service";
+import { TikTokService } from "./services/tiktok.service";
+import { createApiRoutes } from "./routes/api";
+import { logger } from "./utils/logger";
+import type { ServerWebSocket } from "bun";
+
+// Initialize services
+const wsService = new WebSocketService();
+const tiktokService = new TikTokService(wsService);
+
+// Create Hono app
+const app = new Hono();
+
+// API routes
+const apiRoutes = createApiRoutes(tiktokService);
+app.route("/api", apiRoutes);
+
+// Static files
+app.use("/*", serveStatic({ root: "./public" }));
+
+// Start server with WebSocket support
+const server = Bun.serve({
+  port: config.port,
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    // Upgrade WebSocket requests
+    if (url.pathname === "/ws") {
+      const upgraded = server.upgrade(req);
+      if (!upgraded) {
+        return new Response("WebSocket upgrade failed", { status: 400 });
+      }
+      return undefined;
+    }
+
+    // Handle Hono routes
+    return app.fetch(req, server);
+  },
+  websocket: {
+    open(ws: ServerWebSocket<any>) {
+      wsService.addClient(ws);
+    },
+    message(ws: ServerWebSocket<any>, message: string | Buffer) {
+      try {
+        const data = JSON.parse(typeof message === "string" ? message : message.toString());
+
+        switch (data.action) {
+          case "connect":
+            if (data.uniqueId) {
+              tiktokService.connect(data.uniqueId, data.options || {});
+            }
+            break;
+          case "disconnect":
+            tiktokService.disconnect();
+            break;
+          default:
+            logger.warn(`Unknown WS action: ${data.action}`);
+        }
+      } catch (err) {
+        logger.error(`Invalid WS message: ${err}`);
+      }
+    },
+    close(ws: ServerWebSocket<any>) {
+      wsService.removeClient(ws);
+    },
+  },
+});
+
+logger.success(`🚀 Server running at http://localhost:${server.port}`);
+logger.info(`📡 WebSocket endpoint: ws://localhost:${server.port}/ws`);
