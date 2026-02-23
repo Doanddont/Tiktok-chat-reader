@@ -10,7 +10,6 @@
   UI.init();
   Filters.init((filterState) => {
     // Optional: log filter changes
-    // console.log('Filters changed:', filterState);
   });
 
   // =============================================
@@ -42,12 +41,25 @@
     if (e.key === 'Enter') connect();
   });
 
-  UI.dom.clearChatBtn.addEventListener('click', () => UI.clearChat());
+  UI.dom.clearChatBtn.addEventListener('click', () => {
+    UI.clearChat();
+    // Reset internal counters if needed
+    totalStats.chatMsgCount = 0;
+  });
+  
   UI.dom.clearEventsBtn.addEventListener('click', () => UI.clearEvents());
 
   // =============================================
   // WebSocket Events
   // =============================================
+
+  // Track total stats locally
+  let totalStats = { 
+    chatMsgCount: 0, // Added this
+    chatCount: 0, 
+    giftCount: 0, 
+    diamondsCount: 0 
+  };
 
   // Connection status
   WS.on('connected', (data) => {
@@ -68,11 +80,9 @@
   // Chat
   WS.on('chat', (data) => {
     UI.addChat(data);
-    UI.updateStat('chatMsgCount', parseInt(UI.dom.chatMsgCount.textContent.replace(/[^\d]/g, '') || '0') + 1);
+    totalStats.chatMsgCount++; // Increment local counter
+    UI.updateStat('chatMsgCount', totalStats.chatMsgCount);
   });
-
-  // Track total chat count from server stats
-  let totalStats = { chatCount: 0, giftCount: 0, diamondsCount: 0 };
 
   // Gift
   WS.on('gift', (data) => {
