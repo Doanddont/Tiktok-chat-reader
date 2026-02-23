@@ -4,7 +4,7 @@ import { cleanUsername, parseError, sanitizeHtml } from "../../src/utils/sanitiz
 describe("sanitizeHtml", () => {
   test("escapes HTML entities", () => {
     expect(sanitizeHtml("<script>alert('xss')</script>")).toBe(
-      "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;"
+      "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;",
     );
   });
 
