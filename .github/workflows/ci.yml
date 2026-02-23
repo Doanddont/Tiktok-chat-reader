@@ -6,16 +6,19 @@ on:
   pull_request:
     branches: ["main"]
 
+# ⚠️ This is crucial: Give the bot permission to write code
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  lint:
-    name: Lint & Format
+  fix-and-test:
+    name: Auto-Fix & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }} # Ensures we checkout the specific branch
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -25,41 +28,24 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Biome check
+      # 1. AUTO-FIX: This runs the formatter and applies fixes
+      - name: Run Biome Auto-Fix
+        run: bunx @biomejs/biome check --write . || true 
+        # '|| true' ensures the build continues even if it finds errors, so we can commit the fixes
+
+      # 2. COMMIT: If Biome changed anything, push it back to the repo
+      - name: Commit and Push Fixes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-fix linting and formatting issues"
+          branch: ${{ github.head_ref }}
+
+      # 3. VERIFY: Now run the actual checks on the fixed code
+      - name: Verify Linting (Should pass now)
         run: bunx @biomejs/biome check .
 
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: TypeScript check
+      - name: Type Check
         run: bunx tsc --noEmit
 
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run tests
+      - name: Run Tests
         run: bun test
