@@ -31,7 +31,10 @@ export const logger = {
   },
 
   tiktok(msg: string, ...args: any[]) {
-    console.log(`${colors.gray}[${timestamp()}]${colors.reset} ${colors.magenta}[TIKTOK]${colors.reset} ${msg}`, ...args);
+    console.log(
+      `${colors.gray}[${timestamp()}]${colors.reset} ${colors.magenta}[TIKTOK]${colors.reset} ${msg}`,
+      ...args,
+    );
   },
 
   ws(msg: string, ...args: any[]) {

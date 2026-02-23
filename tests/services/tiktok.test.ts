@@ -1,6 +1,6 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test";
-import { WebSocketService } from "../../src/services/websocket.service";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { TikTokService } from "../../src/services/tiktok.service";
+import { WebSocketService } from "../../src/services/websocket.service";
 
 mock.module("../../src/utils/logger", () => ({
   logger: {
@@ -21,7 +21,9 @@ const mockEventHandlers: Record<string, Function> = {};
 mock.module("tiktok-live-connector", () => ({
   WebcastPushConnection: class {
     constructor(_uid: string, _opts: any) {}
-    on(event: string, handler: Function) { mockEventHandlers[event] = handler; }
+    on(event: string, handler: Function) {
+      mockEventHandlers[event] = handler;
+    }
     async connect() {
       if (mockConnectShouldFail) throw mockConnectError;
       return mockConnectResult;
@@ -165,10 +167,19 @@ describe("TikTokService", () => {
   test("chat event increments chatCount and broadcasts", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["chat"]?.({
-      uniqueId: "v1", nickname: "V1", profilePictureUrl: "",
-      comment: "Hello!", followRole: 0, userBadges: [],
-      isModerator: false, isNewGifter: false, isSubscriber: false,
-      topGifterRank: null, teamMemberLevel: 0, msgId: "m1", createTime: "0",
+      uniqueId: "v1",
+      nickname: "V1",
+      profilePictureUrl: "",
+      comment: "Hello!",
+      followRole: 0,
+      userBadges: [],
+      isModerator: false,
+      isNewGifter: false,
+      isSubscriber: false,
+      topGifterRank: null,
+      teamMemberLevel: 0,
+      msgId: "m1",
+      createTime: "0",
     });
     expect(tiktokService.getStats().chatCount).toBe(1);
     expect(broadcasts.find((c) => c.event === "chat")).toBeDefined();
@@ -177,9 +188,17 @@ describe("TikTokService", () => {
   test("gift event updates diamonds and giftCount", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["gift"]?.({
-      uniqueId: "g1", nickname: "G1", profilePictureUrl: "",
-      giftId: 1, giftName: "Rose", giftPictureUrl: "",
-      diamondCount: 1, repeatCount: 5, repeatEnd: true, giftType: 1, describe: "",
+      uniqueId: "g1",
+      nickname: "G1",
+      profilePictureUrl: "",
+      giftId: 1,
+      giftName: "Rose",
+      giftPictureUrl: "",
+      diamondCount: 1,
+      repeatCount: 5,
+      repeatEnd: true,
+      giftType: 1,
+      describe: "",
     });
     const s = tiktokService.getStats();
     expect(s.giftCount).toBe(1);
@@ -189,8 +208,11 @@ describe("TikTokService", () => {
   test("like event updates likeCount", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["like"]?.({
-      uniqueId: "l1", nickname: "L1", profilePictureUrl: "",
-      likeCount: 15, totalLikeCount: 100,
+      uniqueId: "l1",
+      nickname: "L1",
+      profilePictureUrl: "",
+      likeCount: 15,
+      totalLikeCount: 100,
     });
     const s = tiktokService.getStats();
     expect(s.totalLikes).toBe(15);
@@ -200,7 +222,10 @@ describe("TikTokService", () => {
   test("member event increments joinCount", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["member"]?.({
-      uniqueId: "j1", nickname: "J1", profilePictureUrl: "", actionId: 1,
+      uniqueId: "j1",
+      nickname: "J1",
+      profilePictureUrl: "",
+      actionId: 1,
     });
     expect(tiktokService.getStats().joinCount).toBe(1);
   });
@@ -208,8 +233,11 @@ describe("TikTokService", () => {
   test("social follow increments followerCount", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["social"]?.({
-      uniqueId: "f1", nickname: "F1", profilePictureUrl: "",
-      displayType: "pm_mt_msg_viewer", label: "followed",
+      uniqueId: "f1",
+      nickname: "F1",
+      profilePictureUrl: "",
+      displayType: "pm_mt_msg_viewer",
+      label: "followed",
     });
     expect(tiktokService.getStats().followerCount).toBe(1);
     expect(broadcasts.find((c) => c.event === "follow")).toBeDefined();
@@ -218,8 +246,11 @@ describe("TikTokService", () => {
   test("social share increments shareCount", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["social"]?.({
-      uniqueId: "s1", nickname: "S1", profilePictureUrl: "",
-      displayType: "pm_mt_msg_share", label: "shared the live",
+      uniqueId: "s1",
+      nickname: "S1",
+      profilePictureUrl: "",
+      displayType: "pm_mt_msg_share",
+      label: "shared the live",
     });
     expect(tiktokService.getStats().shareCount).toBe(1);
     expect(broadcasts.find((c) => c.event === "share")).toBeDefined();
@@ -241,9 +272,14 @@ describe("TikTokService", () => {
     await tiktokService.connect("testuser");
     for (let i = 0; i < 5; i++) {
       mockEventHandlers["chat"]?.({
-        uniqueId: `u${i}`, nickname: `U${i}`, profilePictureUrl: "",
-        comment: `msg${i}`, followRole: 0, userBadges: [],
-        msgId: `m${i}`, createTime: "0",
+        uniqueId: `u${i}`,
+        nickname: `U${i}`,
+        profilePictureUrl: "",
+        comment: `msg${i}`,
+        followRole: 0,
+        userBadges: [],
+        msgId: `m${i}`,
+        createTime: "0",
       });
     }
     expect(tiktokService.getStats().chatCount).toBe(5);
@@ -252,14 +288,26 @@ describe("TikTokService", () => {
   test("multiple gifts accumulate diamonds", async () => {
     await tiktokService.connect("testuser");
     mockEventHandlers["gift"]?.({
-      uniqueId: "g1", nickname: "G1", profilePictureUrl: "",
-      giftId: 1, giftName: "Rose", diamondCount: 1, repeatCount: 10,
-      repeatEnd: true, giftType: 1,
+      uniqueId: "g1",
+      nickname: "G1",
+      profilePictureUrl: "",
+      giftId: 1,
+      giftName: "Rose",
+      diamondCount: 1,
+      repeatCount: 10,
+      repeatEnd: true,
+      giftType: 1,
     });
     mockEventHandlers["gift"]?.({
-      uniqueId: "g2", nickname: "G2", profilePictureUrl: "",
-      giftId: 2, giftName: "Lion", diamondCount: 29999, repeatCount: 1,
-      repeatEnd: true, giftType: 1,
+      uniqueId: "g2",
+      nickname: "G2",
+      profilePictureUrl: "",
+      giftId: 2,
+      giftName: "Lion",
+      diamondCount: 29999,
+      repeatCount: 1,
+      repeatEnd: true,
+      giftType: 1,
     });
     const s = tiktokService.getStats();
     expect(s.giftCount).toBe(2);

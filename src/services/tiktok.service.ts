@@ -1,9 +1,9 @@
 import { WebcastPushConnection } from "tiktok-live-connector";
 import { config } from "../config";
 import type { StreamStats } from "../types";
-import type { WebSocketService } from "./websocket.service";
-import { cleanUsername, parseError } from "../utils/sanitize";
 import { logger } from "../utils/logger";
+import { cleanUsername, parseError } from "../utils/sanitize";
+import type { WebSocketService } from "./websocket.service";
 
 export class TikTokService {
   private connection: any = null;
@@ -195,8 +195,7 @@ export class TikTokService {
     // Social (follow & share)
     this.connection.on("social", (data: any) => {
       const isFollow =
-        data.displayType === "pm_mt_msg_viewer" ||
-        (data.label && data.label.toLowerCase().includes("follow"));
+        data.displayType === "pm_mt_msg_viewer" || (data.label && data.label.toLowerCase().includes("follow"));
 
       if (isFollow) {
         this.stats.followerCount++;
@@ -283,13 +282,10 @@ export class TikTokService {
     });
 
     // Auto-reconnect
-    if (
-      this.reconnectAttempts < config.connection.maxReconnectAttempts &&
-      reason === "Connection lost"
-    ) {
+    if (this.reconnectAttempts < config.connection.maxReconnectAttempts && reason === "Connection lost") {
       this.reconnectAttempts++;
       logger.info(
-        `Attempting reconnect ${this.reconnectAttempts}/${config.connection.maxReconnectAttempts} for @${uniqueId}...`
+        `Attempting reconnect ${this.reconnectAttempts}/${config.connection.maxReconnectAttempts} for @${uniqueId}...`,
       );
 
       this.reconnectTimer = setTimeout(() => {

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, mock } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { WebSocketService } from "../../src/services/websocket.service";
 
 function createMockWS(): any {
@@ -74,7 +74,9 @@ describe("WebSocketService", () => {
   test("broadcast removes clients that throw", () => {
     const good = createMockWS();
     const bad = createMockWS();
-    bad.send = mock(() => { throw new Error("closed"); });
+    bad.send = mock(() => {
+      throw new Error("closed");
+    });
 
     service.addClient(good);
     service.addClient(bad);

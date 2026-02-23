@@ -166,15 +166,7 @@ export interface StreamStats {
 // =============================================
 // Filter Types
 // =============================================
-export type EventFilterType =
-  | "chat"
-  | "gift"
-  | "like"
-  | "follow"
-  | "share"
-  | "join"
-  | "subscribe"
-  | "question";
+export type EventFilterType = "chat" | "gift" | "like" | "follow" | "share" | "join" | "subscribe" | "question";
 
 export interface FilterConfig {
   enabledEvents: Record<EventFilterType, boolean>;

@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { Hono } from "hono";
 import { createApiRoutes } from "../../src/routes/api";
 
@@ -19,9 +19,17 @@ function mockService(overrides: any = {}) {
     disconnect: mock(() => {}),
     isConnected: mock(() => false),
     getStats: mock(() => ({
-      viewerCount: 0, likeCount: 0, totalLikes: 0, diamondsCount: 0,
-      giftCount: 0, chatCount: 0, followerCount: 0, shareCount: 0,
-      joinCount: 0, connectedSince: null, uniqueId: null,
+      viewerCount: 0,
+      likeCount: 0,
+      totalLikes: 0,
+      diamondsCount: 0,
+      giftCount: 0,
+      chatCount: 0,
+      followerCount: 0,
+      shareCount: 0,
+      joinCount: 0,
+      connectedSince: null,
+      uniqueId: null,
     })),
     ...overrides,
   };
@@ -120,10 +128,17 @@ describe("GET /api/stats", () => {
     const svc = mockService({
       isConnected: mock(() => true),
       getStats: mock(() => ({
-        viewerCount: 5000, likeCount: 10000, totalLikes: 10000,
-        diamondsCount: 500, giftCount: 25, chatCount: 300,
-        followerCount: 10, shareCount: 5, joinCount: 200,
-        connectedSince: "2024-01-01T00:00:00.000Z", uniqueId: "streamer",
+        viewerCount: 5000,
+        likeCount: 10000,
+        totalLikes: 10000,
+        diamondsCount: 500,
+        giftCount: 25,
+        chatCount: 300,
+        followerCount: 10,
+        shareCount: 5,
+        joinCount: 200,
+        connectedSince: "2024-01-01T00:00:00.000Z",
+        uniqueId: "streamer",
       })),
     });
     const app = makeApp(svc);
