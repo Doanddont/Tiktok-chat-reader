@@ -38,11 +38,6 @@
     }
   },
   "files": {
-    "ignore": [
-      "node_modules",
-      "dist",
-      "bun.lockb",
-      "public/js/**"
-    ]
+    "ignore": ["node_modules", "dist", "bun.lockb", "public/js/**"]
   }
 }
