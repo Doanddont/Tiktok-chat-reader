@@ -38,6 +38,7 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", "dist", "bun.lockb", "public/js/**"]
+    "include": ["src/**/*.ts", "tests/**/*.ts", "package.json", "tsconfig.json"],
+    "ignore": ["node_modules", "dist", "bun.lockb", "public/**", ".github/**"]
   }
 }
