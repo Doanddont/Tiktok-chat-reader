@@ -1,5 +1,5 @@
 export const config = {
-  port: parseInt(Bun.env.PORT || "8091", 10),
+  port: Number.parseInt(Bun.env.PORT || "8091", 10),
   tiktok: {
     enableExtendedGiftInfo: true,
     requestPollingIntervalMs: 2000,
