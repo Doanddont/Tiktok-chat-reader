@@ -6,6 +6,7 @@ import { createApiRoutes } from "./routes/api";
 import { TikTokService } from "./services/tiktok.service";
 import { WebSocketService } from "./services/websocket.service";
 import { logger } from "./utils/logger";
+import { cleanUsername } from "./utils/sanitize";
 
 // Initialize services
 const wsService = new WebSocketService();
@@ -71,3 +72,15 @@ const server = Bun.serve({
 
 logger.success(`🚀 Server running at http://localhost:${server.port}`);
 logger.info(`📡 WebSocket endpoint: ws://localhost:${server.port}/ws`);
+
+// CLI Auto-connect Logic
+const args = Bun.argv.slice(2);
+if (args.length > 0) {
+  const targetUser = cleanUsername(args[0]);
+  if (targetUser) {
+    logger.info(`CLI argument detected. Auto-connecting to @${targetUser} in 2 seconds...`);
+    setTimeout(() => {
+      tiktokService.connect(targetUser);
+    }, 2000);
+  }
+}
