@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sanitizeHtml, cleanUsername, parseError } from "../../src/utils/sanitize";
+import { cleanUsername, parseError, sanitizeHtml } from "../../src/utils/sanitize";
 
 describe("sanitizeHtml", () => {
   test("escapes HTML entities", () => {
