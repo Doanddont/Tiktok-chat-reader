@@ -44,9 +44,18 @@ const server = Bun.serve({
     open(ws: ServerWebSocket<any>) {
       wsService.addClient(ws);
     },
-    message(_ws: ServerWebSocket<any>, message: string | Buffer) {
+    message(_ws: ServerWebSocket<any>, message: string | ArrayBuffer | Buffer) {
       try {
-        const data = JSON.parse(typeof message === "string" ? message : message.toString());
+        let raw: string;
+        if (typeof message === "string") {
+          raw = message;
+        } else if (message instanceof ArrayBuffer) {
+          raw = new TextDecoder().decode(message);
+        } else {
+          raw = message.toString();
+        }
+
+        const data = JSON.parse(raw);
 
         switch (data.action) {
           case "connect":

@@ -30,18 +30,37 @@ const UI = (() => {
   const MAX_CHAT = 300;
   const MAX_EVENTS = 200;
 
+  // Whitelist of valid icon classes for event items
+  const VALID_ICON_CLASSES = new Set([
+    'gift', 'follow', 'share', 'join', 'like', 'subscribe', 'question'
+  ]);
+
   let chatAutoScroll = true;
   let eventsAutoScroll = true;
 
   // =============================================
   // Helpers
   // =============================================
-  
-  // Only used for complex event messages (gifts/etc) where HTML structure is needed
+
+  // HTML entity escaping for use in innerHTML contexts
   function sanitize(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
     return d.innerHTML;
+  }
+
+  // URL validation — only allow http(s) URLs
+  function sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return url;
+      }
+    } catch (e) {
+      // invalid URL
+    }
+    return '';
   }
 
   function formatNum(n) {
@@ -84,36 +103,38 @@ const UI = (() => {
   // Trim old messages
   // =============================================
   function trimChat() {
-    // SECURITY FIX: Check actual DOM length, not a variable that might desync
-    while (dom.chatContainer.childElementCount > MAX_CHAT) {
-      dom.chatContainer.firstChild.remove();
+    while (dom.chatContainer.querySelectorAll('.chat-message').length > MAX_CHAT) {
+      const first = dom.chatContainer.querySelector('.chat-message');
+      if (first) first.remove();
+      else break;
     }
-    // Update counter based on actual messages, excluding the empty state div if it exists
     const count = dom.chatContainer.querySelectorAll('.chat-message').length;
     dom.chatCounter.textContent = `${count} messages`;
   }
 
   function trimEvents() {
-    while (dom.eventsContainer.childElementCount > MAX_EVENTS) {
-      dom.eventsContainer.firstChild.remove();
+    while (dom.eventsContainer.querySelectorAll('.event-item').length > MAX_EVENTS) {
+      const first = dom.eventsContainer.querySelector('.event-item');
+      if (first) first.remove();
+      else break;
     }
     const count = dom.eventsContainer.querySelectorAll('.event-item').length;
     dom.eventsCounter.textContent = `${count} events`;
   }
 
   // =============================================
-  // Render Chat Message (Optimized)
+  // Render Chat Message
   // =============================================
   function addChat(data) {
     dom.chatEmptyState?.classList.add('hidden');
 
     const visible = Filters.shouldShow('chat', data);
-    
+
     // Create Main Container
     const el = document.createElement('div');
     el.className = 'chat-message';
     if (!visible) el.classList.add('filtered-out');
-    
+
     el.dataset.eventType = 'chat';
     el.dataset.eventData = JSON.stringify({
       uniqueId: data.uniqueId,
@@ -125,8 +146,9 @@ const UI = (() => {
     const img = document.createElement('img');
     img.className = 'chat-avatar';
     img.loading = 'lazy';
-    img.src = data.profilePictureUrl || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%231e1e1e'/><text x='40' y='48' text-anchor='middle' fill='%23555' font-size='30'>?</text></svg>";
-    
+    const avatarUrl = sanitizeUrl(data.profilePictureUrl);
+    img.src = avatarUrl || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%231e1e1e'/><text x='40' y='48' text-anchor='middle' fill='%23555' font-size='30'>?</text></svg>";
+
     // 2. Body Container
     const bodyDiv = document.createElement('div');
     bodyDiv.className = 'chat-body';
@@ -140,10 +162,11 @@ const UI = (() => {
       const badgeSpan = document.createElement('span');
       badgeSpan.className = 'chat-badges';
       data.userBadges.forEach(b => {
-        if (b.url) {
+        const badgeUrl = sanitizeUrl(b.url);
+        if (badgeUrl) {
           const bImg = document.createElement('img');
           bImg.className = 'chat-badge';
-          bImg.src = b.url;
+          bImg.src = badgeUrl;
           badgeSpan.appendChild(bImg);
         }
       });
@@ -155,13 +178,13 @@ const UI = (() => {
     userSpan.className = 'chat-username';
     if (data.isModerator) userSpan.classList.add('mod');
     else if (data.isSubscriber) userSpan.classList.add('sub');
-    userSpan.textContent = data.nickname || data.uniqueId; // SECURITY: textContent prevents XSS
+    userSpan.textContent = data.nickname || data.uniqueId;
     metaSpan.appendChild(userSpan);
 
     // 4. Comment Text
     const commentSpan = document.createElement('span');
     commentSpan.className = 'chat-text';
-    commentSpan.textContent = data.comment; // SECURITY: textContent prevents XSS
+    commentSpan.textContent = data.comment;
 
     // Assemble
     bodyDiv.appendChild(metaSpan);
@@ -182,6 +205,9 @@ const UI = (() => {
 
     const visible = Filters.shouldShow(eventType, data);
 
+    // Validate iconClass against whitelist
+    const safeIconClass = VALID_ICON_CLASSES.has(iconClass) ? iconClass : '';
+
     const el = document.createElement('div');
     el.className = `event-item${visible ? '' : ' filtered-out'}`;
     el.dataset.eventType = eventType;
@@ -193,15 +219,29 @@ const UI = (() => {
       repeatCount: data.repeatCount || 1,
     });
 
-    // Note: We use innerHTML here for complex event formatting (colors/bolding)
-    // The inputs should be sanitized by the caller using UI.sanitize()
-    el.innerHTML = `
-      <div class="event-icon-wrap ${iconClass}">${emoji}</div>
-      <div class="event-body">
-        <div class="event-text">${html}</div>
-      </div>
-      <span class="event-time">${timeStr()}</span>
-    `;
+    // Build DOM safely
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'event-icon-wrap';
+    if (safeIconClass) iconWrap.classList.add(safeIconClass);
+    iconWrap.textContent = emoji;
+
+    const eventBody = document.createElement('div');
+    eventBody.className = 'event-body';
+
+    const eventText = document.createElement('div');
+    eventText.className = 'event-text';
+    // html is pre-sanitized by the caller using UI.sanitize()
+    eventText.innerHTML = html;
+
+    eventBody.appendChild(eventText);
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'event-time';
+    timeSpan.textContent = timeStr();
+
+    el.appendChild(iconWrap);
+    el.appendChild(eventBody);
+    el.appendChild(timeSpan);
 
     dom.eventsContainer.appendChild(el);
     trimEvents();
@@ -247,22 +287,25 @@ const UI = (() => {
   }
 
   // =============================================
-  // Clear
+  // Clear — safely preserves empty state elements
   // =============================================
   function clearChat() {
-    // Remove all chat messages but keep empty state
-    dom.chatContainer.innerHTML = '';
+    // Remove only chat-message elements, keep empty state intact
+    const messages = dom.chatContainer.querySelectorAll('.chat-message');
+    messages.forEach((msg) => msg.remove());
+
     if (dom.chatEmptyState) {
-      dom.chatContainer.appendChild(dom.chatEmptyState);
       dom.chatEmptyState.classList.remove('hidden');
     }
     dom.chatCounter.textContent = '0 messages';
   }
 
   function clearEvents() {
-    dom.eventsContainer.innerHTML = '';
+    // Remove only event-item elements, keep empty state intact
+    const items = dom.eventsContainer.querySelectorAll('.event-item');
+    items.forEach((item) => item.remove());
+
     if (dom.eventsEmptyState) {
-      dom.eventsContainer.appendChild(dom.eventsEmptyState);
       dom.eventsEmptyState.classList.remove('hidden');
     }
     dom.eventsCounter.textContent = '0 events';
@@ -285,6 +328,7 @@ const UI = (() => {
     clearChat,
     clearEvents,
     sanitize,
+    sanitizeUrl,
     formatNum,
   };
 })();

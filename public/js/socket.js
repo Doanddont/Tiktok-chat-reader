@@ -28,8 +28,10 @@ const WS = (() => {
 
     ws.onmessage = (event) => {
       try {
-        const { event: evtName, data } = JSON.parse(event.data);
-        emit(evtName, data);
+        const parsed = JSON.parse(event.data);
+        if (parsed && parsed.event) {
+          emit(parsed.event, parsed.data);
+        }
       } catch (err) {
         console.error('[WS] Parse error:', err);
       }

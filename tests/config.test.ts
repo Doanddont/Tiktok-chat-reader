@@ -25,6 +25,10 @@ describe("config", () => {
     expect(config.connection.reconnectDelayMs).toBeGreaterThan(0);
   });
 
+  test("reconnectDelayMs is >= cooldownMs", () => {
+    expect(config.connection.reconnectDelayMs).toBeGreaterThanOrEqual(config.connection.cooldownMs);
+  });
+
   test("has limits config", () => {
     expect(config.limits).toBeDefined();
     expect(config.limits.maxChatMessages).toBeGreaterThan(0);

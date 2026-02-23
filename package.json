@@ -1,6 +1,6 @@
 {
   "name": "tiktok-chat-reader",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "TikTok Live Chat Reader built with Bun + Hono + TypeScript",
   "type": "module",
   "scripts": {

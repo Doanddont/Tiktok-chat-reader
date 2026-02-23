@@ -43,22 +43,21 @@
 
   UI.dom.clearChatBtn.addEventListener('click', () => {
     UI.clearChat();
-    // Reset internal counters if needed
     totalStats.chatMsgCount = 0;
+    UI.updateStat('chatMsgCount', 0);
   });
-  
+
   UI.dom.clearEventsBtn.addEventListener('click', () => UI.clearEvents());
 
   // =============================================
   // WebSocket Events
   // =============================================
 
-  // Track total stats locally
-  let totalStats = { 
-    chatMsgCount: 0, // Added this
-    chatCount: 0, 
-    giftCount: 0, 
-    diamondsCount: 0 
+  // Track total stats locally (removed unused chatCount)
+  let totalStats = {
+    chatMsgCount: 0,
+    giftCount: 0,
+    diamondsCount: 0,
   };
 
   // Connection status
@@ -80,7 +79,7 @@
   // Chat
   WS.on('chat', (data) => {
     UI.addChat(data);
-    totalStats.chatMsgCount++; // Increment local counter
+    totalStats.chatMsgCount++;
     UI.updateStat('chatMsgCount', totalStats.chatMsgCount);
   });
 
@@ -89,8 +88,10 @@
     // Only show streak-end or non-streak gifts
     if (data.giftType === 1 && !data.repeatEnd) return;
 
-    const giftImg = data.giftPictureUrl
-      ? `<img class="gift-img" src="${UI.sanitize(data.giftPictureUrl)}" alt="${UI.sanitize(data.giftName)}">`
+    // Validate gift image URL before using it
+    const safeGiftUrl = UI.sanitizeUrl(data.giftPictureUrl);
+    const giftImg = safeGiftUrl
+      ? `<img class="gift-img" src="${UI.sanitize(safeGiftUrl)}" alt="${UI.sanitize(data.giftName)}">`
       : '';
 
     const totalDiamonds = (data.diamondCount || 0) * (data.repeatCount || 1);

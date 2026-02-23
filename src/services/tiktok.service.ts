@@ -12,6 +12,7 @@ export class TikTokService {
   private lastConnectionAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
+  private isReconnecting = false;
 
   public stats: StreamStats = this.defaultStats();
 
@@ -35,8 +36,10 @@ export class TikTokService {
       return { success: false, message: "Already connecting. Please wait." };
     }
 
-    // Cleanup previous connection
-    this.disconnect();
+    // Cleanup previous connection (but preserve reconnect state if reconnecting)
+    const wasReconnecting = this.isReconnecting;
+    const savedReconnectAttempts = this.reconnectAttempts;
+    this.disconnectInternal();
 
     uniqueId = cleanUsername(uniqueId);
     if (!uniqueId) {
@@ -44,7 +47,14 @@ export class TikTokService {
     }
 
     this.isConnecting = true;
-    this.reconnectAttempts = 0;
+
+    // Only reset reconnect attempts for user-initiated connections, not auto-reconnects
+    if (!wasReconnecting) {
+      this.reconnectAttempts = 0;
+    } else {
+      this.reconnectAttempts = savedReconnectAttempts;
+    }
+    this.isReconnecting = false;
 
     try {
       const connectionOptions: Record<string, any> = {
@@ -67,6 +77,7 @@ export class TikTokService {
       this.stats.connectedSince = new Date().toISOString();
       this.stats.uniqueId = uniqueId;
       this.isConnecting = false;
+      this.reconnectAttempts = 0; // Reset on successful connection
 
       this.wsService.broadcast("connected", {
         uniqueId,
@@ -89,20 +100,10 @@ export class TikTokService {
   }
 
   disconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    if (this.connection) {
-      try {
-        this.connection.disconnect();
-      } catch {}
-      this.connection = null;
-    }
-
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
+    this.disconnectInternal();
     this.stats = this.defaultStats();
-    this.isConnecting = false;
   }
 
   getStats(): StreamStats {
@@ -116,6 +117,26 @@ export class TikTokService {
   // =============================================
   // Private Methods
   // =============================================
+
+  /**
+   * Internal disconnect — cleans up connection and timers but does NOT reset
+   * reconnect state or stats (those are managed by callers).
+   */
+  private disconnectInternal(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.connection) {
+      try {
+        this.connection.disconnect();
+      } catch {}
+      this.connection = null;
+    }
+
+    this.isConnecting = false;
+  }
 
   private registerEvents(uniqueId: string): void {
     if (!this.connection) return;
@@ -281,9 +302,10 @@ export class TikTokService {
       message: reason,
     });
 
-    // Auto-reconnect
+    // Auto-reconnect only on unexpected disconnects
     if (this.reconnectAttempts < config.connection.maxReconnectAttempts && reason === "Connection lost") {
       this.reconnectAttempts++;
+      this.isReconnecting = true;
       logger.info(
         `Attempting reconnect ${this.reconnectAttempts}/${config.connection.maxReconnectAttempts} for @${uniqueId}...`,
       );

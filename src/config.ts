@@ -1,3 +1,6 @@
+const cooldownMs = 3000;
+const reconnectDelayMs = 5000;
+
 export const config = {
   port: Number.parseInt(Bun.env.PORT || "8091", 10),
   tiktok: {
@@ -6,9 +9,10 @@ export const config = {
     sessionId: Bun.env.TIKTOK_SESSION_ID || undefined,
   },
   connection: {
-    cooldownMs: 3000,
+    cooldownMs,
     maxReconnectAttempts: 5,
-    reconnectDelayMs: 5000,
+    // Ensure reconnect delay is always >= cooldown to prevent silent failures
+    reconnectDelayMs: Math.max(reconnectDelayMs, cooldownMs),
   },
   limits: {
     maxChatMessages: 300,

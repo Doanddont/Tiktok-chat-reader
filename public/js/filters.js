@@ -2,14 +2,16 @@
  * Filter System — toggles + text/username/diamond filters
  */
 const Filters = (() => {
-  // Toggle elements
+  // Toggle elements (including subscribe and question)
   const toggles = {
-    chat:   document.getElementById('toggleChat'),
-    gift:   document.getElementById('toggleGift'),
-    like:   document.getElementById('toggleLike'),
-    follow: document.getElementById('toggleFollow'),
-    share:  document.getElementById('toggleShare'),
-    join:   document.getElementById('toggleJoin'),
+    chat:      document.getElementById('toggleChat'),
+    gift:      document.getElementById('toggleGift'),
+    like:      document.getElementById('toggleLike'),
+    follow:    document.getElementById('toggleFollow'),
+    share:     document.getElementById('toggleShare'),
+    join:      document.getElementById('toggleJoin'),
+    subscribe: document.getElementById('toggleSubscribe'),
+    question:  document.getElementById('toggleQuestion'),
   };
 
   // Filter input elements
@@ -47,6 +49,7 @@ const Filters = (() => {
 
     // Toggle listeners
     Object.entries(toggles).forEach(([key, el]) => {
+      if (!el) return; // Guard against missing DOM elements
       el.addEventListener('change', () => {
         state.enabledEvents[key] = el.checked;
         notifyChange();
@@ -101,15 +104,13 @@ const Filters = (() => {
    */
   function shouldShow(eventType, data) {
     // 1. Toggle check
-    // Map subscribe and question to always show (no toggle for them yet)
-    const toggleKey = eventType;
-    if (state.enabledEvents[toggleKey] === false) {
+    if (state.enabledEvents[eventType] === false) {
       return false;
     }
 
     // 2. Username filter
     if (state.usernameFilter) {
-      const username = (data.uniqueId || data.nickname || '').toLowerCase();
+      const username = (data.uniqueId || '').toLowerCase();
       const nickname = (data.nickname || '').toLowerCase();
       if (
         !username.includes(state.usernameFilter) &&
