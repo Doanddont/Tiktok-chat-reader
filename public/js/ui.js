@@ -30,14 +30,14 @@ const UI = (() => {
   const MAX_CHAT = 300;
   const MAX_EVENTS = 200;
 
-  let chatCount = 0;
-  let eventCount = 0;
   let chatAutoScroll = true;
   let eventsAutoScroll = true;
 
   // =============================================
   // Helpers
   // =============================================
+  
+  // Only used for complex event messages (gifts/etc) where HTML structure is needed
   function sanitize(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
@@ -52,10 +52,6 @@ const UI = (() => {
 
   function timeStr() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function avatarUrl(url) {
-    return url || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%231e1e1e'/><text x='40' y='48' text-anchor='middle' fill='%23555' font-size='30'>?</text></svg>";
   }
 
   // =============================================
@@ -74,17 +70,13 @@ const UI = (() => {
 
   function scrollChat() {
     if (chatAutoScroll) {
-      requestAnimationFrame(() => {
-        dom.chatContainer.scrollTop = dom.chatContainer.scrollHeight;
-      });
+      dom.chatContainer.scrollTop = dom.chatContainer.scrollHeight;
     }
   }
 
   function scrollEvents() {
     if (eventsAutoScroll) {
-      requestAnimationFrame(() => {
-        dom.eventsContainer.scrollTop = dom.eventsContainer.scrollHeight;
-      });
+      dom.eventsContainer.scrollTop = dom.eventsContainer.scrollHeight;
     }
   }
 
@@ -92,53 +84,36 @@ const UI = (() => {
   // Trim old messages
   // =============================================
   function trimChat() {
-    while (chatCount > MAX_CHAT) {
-      const first = dom.chatContainer.querySelector('.chat-message');
-      if (first) { first.remove(); chatCount--; }
-      else break;
+    // SECURITY FIX: Check actual DOM length, not a variable that might desync
+    while (dom.chatContainer.childElementCount > MAX_CHAT) {
+      dom.chatContainer.firstChild.remove();
     }
+    // Update counter based on actual messages, excluding the empty state div if it exists
+    const count = dom.chatContainer.querySelectorAll('.chat-message').length;
+    dom.chatCounter.textContent = `${count} messages`;
   }
 
   function trimEvents() {
-    while (eventCount > MAX_EVENTS) {
-      const first = dom.eventsContainer.querySelector('.event-item');
-      if (first) { first.remove(); eventCount--; }
-      else break;
+    while (dom.eventsContainer.childElementCount > MAX_EVENTS) {
+      dom.eventsContainer.firstChild.remove();
     }
+    const count = dom.eventsContainer.querySelectorAll('.event-item').length;
+    dom.eventsCounter.textContent = `${count} events`;
   }
 
   // =============================================
-  // Render Chat Message
+  // Render Chat Message (Optimized)
   // =============================================
   function addChat(data) {
     dom.chatEmptyState?.classList.add('hidden');
 
-    // Badges
-    let badges = '';
-    if (data.userBadges?.length) {
-      badges = '<span class="chat-badges">';
-      data.userBadges.forEach(b => {
-        if (b.url) badges += `<img class="chat-badge" src="${sanitize(b.url)}" alt="${sanitize(b.type || '')}" loading="lazy">`;
-      });
-      badges += '</span>';
-    }
-
-    // Top gifter
-    let topGifter = '';
-    if (data.topGifterRank && data.topGifterRank <= 3) {
-      const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
-      topGifter = `<span class="chat-top-gifter">${medals[data.topGifterRank]} #${data.topGifterRank}</span>`;
-    }
-
-    // Username class
-    let uClass = 'chat-username';
-    if (data.isModerator) uClass += ' mod';
-    else if (data.isSubscriber) uClass += ' sub';
-
     const visible = Filters.shouldShow('chat', data);
-
+    
+    // Create Main Container
     const el = document.createElement('div');
-    el.className = `chat-message${visible ? '' : ' filtered-out'}`;
+    el.className = 'chat-message';
+    if (!visible) el.classList.add('filtered-out');
+    
     el.dataset.eventType = 'chat';
     el.dataset.eventData = JSON.stringify({
       uniqueId: data.uniqueId,
@@ -146,19 +121,55 @@ const UI = (() => {
       comment: data.comment,
     });
 
-    el.innerHTML = `
-      <img class="chat-avatar" src="${avatarUrl(data.profilePictureUrl)}" alt="" loading="lazy">
-      <div class="chat-body">
-        <span class="chat-meta">
-          ${topGifter}${badges}<span class="${uClass}" title="@${sanitize(data.uniqueId)}">${sanitize(data.nickname || data.uniqueId)}</span>
-        </span>
-        <span class="chat-text">${sanitize(data.comment)}</span>
-      </div>
-    `;
+    // 1. Avatar
+    const img = document.createElement('img');
+    img.className = 'chat-avatar';
+    img.loading = 'lazy';
+    img.src = data.profilePictureUrl || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%231e1e1e'/><text x='40' y='48' text-anchor='middle' fill='%23555' font-size='30'>?</text></svg>";
+    
+    // 2. Body Container
+    const bodyDiv = document.createElement('div');
+    bodyDiv.className = 'chat-body';
+
+    // 3. Meta (Username + Badges)
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'chat-meta';
+
+    // Badges logic
+    if (data.userBadges?.length) {
+      const badgeSpan = document.createElement('span');
+      badgeSpan.className = 'chat-badges';
+      data.userBadges.forEach(b => {
+        if (b.url) {
+          const bImg = document.createElement('img');
+          bImg.className = 'chat-badge';
+          bImg.src = b.url;
+          badgeSpan.appendChild(bImg);
+        }
+      });
+      metaSpan.appendChild(badgeSpan);
+    }
+
+    // Username logic
+    const userSpan = document.createElement('span');
+    userSpan.className = 'chat-username';
+    if (data.isModerator) userSpan.classList.add('mod');
+    else if (data.isSubscriber) userSpan.classList.add('sub');
+    userSpan.textContent = data.nickname || data.uniqueId; // SECURITY: textContent prevents XSS
+    metaSpan.appendChild(userSpan);
+
+    // 4. Comment Text
+    const commentSpan = document.createElement('span');
+    commentSpan.className = 'chat-text';
+    commentSpan.textContent = data.comment; // SECURITY: textContent prevents XSS
+
+    // Assemble
+    bodyDiv.appendChild(metaSpan);
+    bodyDiv.appendChild(commentSpan);
+    el.appendChild(img);
+    el.appendChild(bodyDiv);
 
     dom.chatContainer.appendChild(el);
-    chatCount++;
-    dom.chatCounter.textContent = `${chatCount} messages`;
     trimChat();
     scrollChat();
   }
@@ -182,6 +193,8 @@ const UI = (() => {
       repeatCount: data.repeatCount || 1,
     });
 
+    // Note: We use innerHTML here for complex event formatting (colors/bolding)
+    // The inputs should be sanitized by the caller using UI.sanitize()
     el.innerHTML = `
       <div class="event-icon-wrap ${iconClass}">${emoji}</div>
       <div class="event-body">
@@ -191,8 +204,6 @@ const UI = (() => {
     `;
 
     dom.eventsContainer.appendChild(el);
-    eventCount++;
-    dom.eventsCounter.textContent = `${eventCount} events`;
     trimEvents();
     scrollEvents();
   }
@@ -240,21 +251,21 @@ const UI = (() => {
   // =============================================
   function clearChat() {
     // Remove all chat messages but keep empty state
-    dom.chatContainer.querySelectorAll('.chat-message').forEach(el => el.remove());
-    chatCount = 0;
-    dom.chatCounter.textContent = '0 messages';
+    dom.chatContainer.innerHTML = '';
     if (dom.chatEmptyState) {
+      dom.chatContainer.appendChild(dom.chatEmptyState);
       dom.chatEmptyState.classList.remove('hidden');
     }
+    dom.chatCounter.textContent = '0 messages';
   }
 
   function clearEvents() {
-    dom.eventsContainer.querySelectorAll('.event-item').forEach(el => el.remove());
-    eventCount = 0;
-    dom.eventsCounter.textContent = '0 events';
+    dom.eventsContainer.innerHTML = '';
     if (dom.eventsEmptyState) {
+      dom.eventsContainer.appendChild(dom.eventsEmptyState);
       dom.eventsEmptyState.classList.remove('hidden');
     }
+    dom.eventsCounter.textContent = '0 events';
   }
 
   // =============================================
