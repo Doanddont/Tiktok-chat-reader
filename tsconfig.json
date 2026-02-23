@@ -10,7 +10,9 @@
     "outDir": "./dist",
     "rootDir": ".",
     "types": ["bun"],
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": false
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "public", "dist"]
 }
