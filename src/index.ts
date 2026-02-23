@@ -1,11 +1,11 @@
+import type { ServerWebSocket } from "bun";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { config } from "./config";
-import { WebSocketService } from "./services/websocket.service";
-import { TikTokService } from "./services/tiktok.service";
 import { createApiRoutes } from "./routes/api";
+import { TikTokService } from "./services/tiktok.service";
+import { WebSocketService } from "./services/websocket.service";
 import { logger } from "./utils/logger";
-import type { ServerWebSocket } from "bun";
 
 // Initialize services
 const wsService = new WebSocketService();
@@ -43,7 +43,7 @@ const server = Bun.serve({
     open(ws: ServerWebSocket<any>) {
       wsService.addClient(ws);
     },
-    message(ws: ServerWebSocket<any>, message: string | Buffer) {
+    message(_ws: ServerWebSocket<any>, message: string | Buffer) {
       try {
         const data = JSON.parse(typeof message === "string" ? message : message.toString());
 
