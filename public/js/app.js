@@ -1,206 +1,270 @@
-/**
- * Main Application — wires everything together
- */
-;(function () {
+(function () {
   'use strict';
 
-  // =============================================
-  // Initialize modules
-  // =============================================
-  UI.init();
-  Filters.init((filterState) => {
-    // Optional: log filter changes
-  });
+  let isConnected = false;
 
-  // =============================================
-  // Connection Actions
-  // =============================================
   function connect() {
-    const uniqueId = UI.dom.usernameInput.value.trim();
-    if (!uniqueId) {
-      Toast.error('Please enter a TikTok username');
-      UI.dom.usernameInput.focus();
+    const input = document.getElementById('usernameInput');
+    const select = document.getElementById('connectionType');
+    if (!input) return;
+
+    const username = input.value.trim().replace(/^@/, '');
+    if (!username) {
+      Toast.warning('Please enter a TikTok username');
+      input.focus();
       return;
     }
-    UI.setStatus('connecting');
-    WS.sendConnect(uniqueId);
+
+    if (!/^[a-zA-Z0-9_.]+$/.test(username)) {
+      Toast.error('Invalid username format');
+      input.focus();
+      return;
+    }
+
+    const connectionType = select ? select.value : 'auto';
+
+    UI.setStatus('connecting', `Connecting to @${username}...`);
+    UI.setConnectUI(true);
+
+    Socket.sendConnect(username, connectionType);
   }
 
   function disconnect() {
-    WS.sendDisconnect();
-    UI.setStatus('disconnected');
+    Socket.sendDisconnect();
   }
 
-  // =============================================
-  // DOM Events
-  // =============================================
-  UI.dom.connectBtn.addEventListener('click', connect);
-  UI.dom.disconnectBtn.addEventListener('click', disconnect);
+  function handleConnectionState(state) {
+    if (!state) return;
 
-  UI.dom.usernameInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') connect();
+    switch (state.status) {
+      case 'connected':
+        isConnected = true;
+        UI.setStatus('connected', `Connected to @${state.uniqueId || ''}`);
+        UI.setConnectUI(true);
+        UI.setConnectionMethod(state.activeMethod, state.fallbackUsed);
+        UI.showStats(true);
+        Toast.success(`Connected to @${state.uniqueId}${state.fallbackUsed ? ' (fallback)' : ''}`);
+        break;
+
+      case 'connecting':
+        UI.setStatus('connecting', `Connecting to @${state.uniqueId || ''}...`);
+        UI.setConnectUI(true);
+        break;
+
+      case 'failed':
+        isConnected = false;
+        UI.setStatus('failed', `Failed: ${state.failureReason || 'Unknown error'}`);
+        UI.setConnectUI(false);
+        UI.setConnectionMethod(null, false);
+        UI.showStats(false);
+        Toast.error(state.failureReason || 'Connection failed');
+        break;
+
+      case 'disconnected':
+        isConnected = false;
+        UI.setStatus('disconnected', 'Not connected');
+        UI.setConnectUI(false);
+        UI.setConnectionMethod(null, false);
+        UI.showStats(false);
+        break;
+    }
+  }
+
+  // Socket event handlers
+  Socket.on('open', () => {
+    console.log('[WS] Connected to server');
   });
 
-  UI.dom.clearChatBtn.addEventListener('click', () => {
-    UI.clearChat();
-    totalStats.chatMsgCount = 0;
-    UI.updateStat('chatMsgCount', 0);
+  Socket.on('close', () => {
+    console.log('[WS] Disconnected from server');
   });
 
-  UI.dom.clearEventsBtn.addEventListener('click', () => UI.clearEvents());
-
-  // =============================================
-  // WebSocket Events
-  // =============================================
-
-  // Track total stats locally (removed unused chatCount)
-  let totalStats = {
-    chatMsgCount: 0,
-    giftCount: 0,
-    diamondsCount: 0,
-  };
-
-  // Connection status
-  WS.on('connected', (data) => {
-    UI.setStatus('connected', `Connected to @${data.uniqueId}`);
-    Toast.success(`Connected to @${data.uniqueId}`);
+  Socket.on('init', (data) => {
+    if (data.connectorVersion) {
+      UI.setConnectorVersion(data.connectorVersion);
+    }
+    if (data.connection) {
+      handleConnectionState(data.connection);
+    }
+    if (data.connected && data.stats) {
+      UI.updateStat('viewerCount', data.stats.viewerCount);
+      UI.updateStat('likeCount', data.stats.likeCount);
+      UI.updateStat('diamondCount', data.stats.diamondsCount);
+      UI.updateStat('giftCount', data.stats.giftCount);
+      UI.updateStat('chatMsgCount', data.stats.chatCount);
+    }
   });
 
-  WS.on('disconnected', (data) => {
-    UI.setStatus('disconnected', data?.message || 'Disconnected');
-    Toast.info(data?.message || 'Disconnected');
+  Socket.on('connectionState', handleConnectionState);
+
+  Socket.on('connected', (data) => {
+    // Also handled by connectionState, but keep for compatibility
   });
 
-  WS.on('error', (data) => {
-    UI.setStatus('disconnected', data?.message);
-    Toast.error(data?.message || 'An error occurred');
+  Socket.on('disconnected', (data) => {
+    isConnected = false;
+    UI.setStatus('disconnected', 'Not connected');
+    UI.setConnectUI(false);
+    UI.setConnectionMethod(null, false);
+    UI.showStats(false);
+    if (data && data.reason) {
+      Toast.info(`Disconnected: ${data.reason}`);
+    }
   });
 
-  // Chat
-  WS.on('chat', (data) => {
+  Socket.on('error', (data) => {
+    const msg = data?.message || 'Unknown error';
+    Toast.error(msg);
+    console.error('[TikTok Error]', msg);
+  });
+
+  Socket.on('toast', (data) => {
+    if (data && data.message) {
+      Toast.show(data.message, data.type || 'info');
+    }
+  });
+
+  // TikTok events
+  Socket.on('chat', (data) => {
     UI.addChat(data);
-    totalStats.chatMsgCount++;
-    UI.updateStat('chatMsgCount', totalStats.chatMsgCount);
   });
 
-  // Gift
-  WS.on('gift', (data) => {
-    // Only show streak-end or non-streak gifts
-    if (data.giftType === 1 && !data.repeatEnd) return;
-
-    // Validate gift image URL before using it
-    const safeGiftUrl = UI.sanitizeUrl(data.giftPictureUrl);
-    const giftImg = safeGiftUrl
-      ? `<img class="gift-img" src="${UI.sanitize(safeGiftUrl)}" alt="${UI.sanitize(data.giftName)}">`
+  Socket.on('gift', (data) => {
+    const giftImg = data.giftPictureUrl
+      ? `<img class="gift-img" src="${UI.sanitizeUrl(data.giftPictureUrl)}" alt="${UI.sanitize(data.giftName)}" loading="lazy">`
       : '';
-
-    const totalDiamonds = (data.diamondCount || 0) * (data.repeatCount || 1);
-    totalStats.diamondsCount += totalDiamonds;
-    totalStats.giftCount++;
-
-    UI.addEvent('gift', '🎁', 'gift',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> sent <span class="hl">${UI.sanitize(data.giftName)}</span> ${giftImg} x${data.repeatCount || 1} <span class="hl-cyan">(💎 ${UI.formatNum(totalDiamonds)})</span>`,
-      data
-    );
-
-    UI.updateStat('diamondCount', totalStats.diamondsCount);
-    UI.updateStat('giftCount', totalStats.giftCount);
-  });
-
-  // Like
-  WS.on('like', (data) => {
-    UI.updateStat('likeCount', data.totalLikeCount || 0);
-
-    UI.addEvent('like', '❤️', 'like',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> sent <span class="hl">${data.likeCount}</span> likes`,
+    const diamonds = (data.diamondCount || 0) * (data.repeatCount || 1);
+    UI.addEvent(
+      'gift', '🎁', 'gift',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> sent ${giftImg}<span class="hl">${UI.sanitize(data.giftName)}</span> x${data.repeatCount || 1} (<span class="hl-cyan">${diamonds} 💎</span>)`,
       data
     );
   });
 
-  // Follow
-  WS.on('follow', (data) => {
-    UI.addEvent('follow', '➕', 'follow',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> followed!`,
+  Socket.on('like', (data) => {
+    UI.addEvent(
+      'like', '❤️', 'like',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> liked <span class="hl">x${data.likeCount || 1}</span>`,
       data
     );
   });
 
-  // Share
-  WS.on('share', (data) => {
-    UI.addEvent('share', '🔗', 'share',
+  Socket.on('member', (data) => {
+    UI.addEvent(
+      'member', '👋', 'join',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> joined the stream`,
+      data
+    );
+  });
+
+  Socket.on('follow', (data) => {
+    UI.addEvent(
+      'follow', '➕', 'follow',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> followed`,
+      data
+    );
+  });
+
+  Socket.on('share', (data) => {
+    UI.addEvent(
+      'share', '🔗', 'share',
       `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> shared the stream`,
       data
     );
   });
 
-  // Member join
-  WS.on('member', (data) => {
-    UI.addEvent('join', '👋', 'join',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> joined`,
+  Socket.on('subscribe', (data) => {
+    UI.addEvent(
+      'subscribe', '⭐', 'subscribe',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> subscribed${data.subMonth ? ` (${data.subMonth} months)` : ''}`,
       data
     );
   });
 
-  // Subscribe
-  WS.on('subscribe', (data) => {
-    UI.addEvent('subscribe', '⭐', 'subscribe',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> subscribed!`,
+  Socket.on('question', (data) => {
+    UI.addEvent(
+      'question', '❓', 'question',
+      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> asked: <span class="hl-cyan">${UI.sanitize(data.questionText)}</span>`,
       data
     );
   });
 
-  // Question
-  WS.on('question', (data) => {
-    UI.addEvent('question', '❓', 'question',
-      `<strong>${UI.sanitize(data.nickname || data.uniqueId)}</strong> asked: <em>"${UI.sanitize(data.questionText)}"</em>`,
-      data
-    );
-  });
-
-  // Room user / viewer count
-  WS.on('roomUser', (data) => {
+  Socket.on('roomUser', (data) => {
     UI.updateStat('viewerCount', data.viewerCount || 0);
   });
 
-  // Stream end
-  WS.on('streamEnd', () => {
-    UI.setStatus('disconnected', 'Stream has ended');
-    Toast.warning('The live stream has ended');
+  Socket.on('streamEnd', () => {
+    isConnected = false;
+    UI.setStatus('disconnected', 'Stream ended');
+    UI.setConnectUI(false);
+    UI.setConnectionMethod(null, false);
+    Toast.warning('Stream has ended');
   });
 
-  // =============================================
-  // URL Parameter Support
-  // =============================================
+  // Update stats periodically (from broadcast data)
+  Socket.on('chat', () => {
+    const el = document.getElementById('chatMsgCount');
+    if (el) {
+      const current = parseInt(el.textContent.replace(/[^0-9]/g, ''), 10) || 0;
+      UI.updateStat('chatMsgCount', current + 1);
+    }
+  });
+
+  // Check URL params
   function checkUrlParams() {
     const params = new URLSearchParams(window.location.search);
-    const uniqueId = params.get('uniqueId') || params.get('username') || params.get('u');
+    const username = params.get('username') || params.get('user') || params.get('u');
+    const type = params.get('type') || params.get('method');
 
-    if (uniqueId) {
-      UI.dom.usernameInput.value = uniqueId.replace(/^@/, '');
-      setTimeout(connect, 800);
+    if (username) {
+      const input = document.getElementById('usernameInput');
+      if (input) input.value = username;
+
+      if (type && ['auto', 'connector', 'euler'].includes(type)) {
+        const select = document.getElementById('connectionType');
+        if (select) select.value = type;
+      }
+
+      setTimeout(() => connect(), 500);
     }
   }
 
-  // =============================================
-  // Keyboard Shortcuts
-  // =============================================
-  document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + K = focus username input
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      UI.dom.usernameInput.focus();
-      UI.dom.usernameInput.select();
+  // Init
+  document.addEventListener('DOMContentLoaded', () => {
+    UI.init();
+    Filters.init();
+    Socket.connect();
+
+    // Button handlers
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const usernameInput = document.getElementById('usernameInput');
+
+    if (connectBtn) connectBtn.addEventListener('click', connect);
+    if (disconnectBtn) disconnectBtn.addEventListener('click', disconnect);
+    if (usernameInput) {
+      usernameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (isConnected) disconnect();
+          else connect();
+        }
+      });
     }
-    // Escape = blur
-    if (e.key === 'Escape') {
-      document.activeElement?.blur();
-    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Ctrl+K = focus username input
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        if (usernameInput) usernameInput.focus();
+      }
+      // Escape = disconnect
+      if (e.key === 'Escape' && isConnected) {
+        disconnect();
+      }
+    });
+
+    checkUrlParams();
   });
-
-  // =============================================
-  // Start
-  // =============================================
-  checkUrlParams();
-  UI.dom.usernameInput.focus();
-
 })();

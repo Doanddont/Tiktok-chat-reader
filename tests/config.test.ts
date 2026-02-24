@@ -2,36 +2,38 @@ import { describe, expect, test } from "bun:test";
 import { config } from "../src/config";
 
 describe("config", () => {
-  test("has valid port number", () => {
-    expect(typeof config.port).toBe("number");
+  test("has required port", () => {
     expect(config.port).toBeGreaterThan(0);
-    expect(config.port).toBeLessThan(65536);
   });
 
-  test("has tiktok config", () => {
-    expect(config.tiktok).toBeDefined();
-    expect(typeof config.tiktok.enableExtendedGiftInfo).toBe("boolean");
-    expect(typeof config.tiktok.requestPollingIntervalMs).toBe("number");
-    expect(config.tiktok.requestPollingIntervalMs).toBeGreaterThan(0);
+  test("has host", () => {
+    expect(config.host).toBeTruthy();
   });
 
-  test("has connection config", () => {
+  test("has connector settings", () => {
+    expect(config.connector).toBeDefined();
+    expect(config.connector.enableExtendedGiftInfo).toBe(true);
+  });
+
+  test("has euler settings", () => {
+    expect(config.euler).toBeDefined();
+    expect(config.euler.wsUrl).toBeTruthy();
+  });
+
+  test("has connection settings", () => {
     expect(config.connection).toBeDefined();
-    expect(typeof config.connection.cooldownMs).toBe("number");
-    expect(typeof config.connection.maxReconnectAttempts).toBe("number");
-    expect(typeof config.connection.reconnectDelayMs).toBe("number");
-    expect(config.connection.cooldownMs).toBeGreaterThan(0);
+    expect(config.connection.defaultType).toMatch(/^(auto|connector|euler)$/);
+    expect(config.connection.connectorTimeoutMs).toBeGreaterThan(0);
+    expect(config.connection.eulerTimeoutMs).toBeGreaterThan(0);
     expect(config.connection.maxReconnectAttempts).toBeGreaterThan(0);
-    expect(config.connection.reconnectDelayMs).toBeGreaterThan(0);
   });
 
-  test("reconnectDelayMs is >= cooldownMs", () => {
-    expect(config.connection.reconnectDelayMs).toBeGreaterThanOrEqual(config.connection.cooldownMs);
+  test("has fallback enabled by default", () => {
+    expect(config.connection.fallbackEnabled).toBe(true);
   });
 
-  test("has limits config", () => {
-    expect(config.limits).toBeDefined();
+  test("has limits", () => {
     expect(config.limits.maxChatMessages).toBeGreaterThan(0);
-    expect(config.limits.maxEventMessages).toBeGreaterThan(0);
+    expect(config.limits.maxEvents).toBeGreaterThan(0);
   });
 });

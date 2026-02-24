@@ -1,13 +1,11 @@
-/**
- * WebSocket Client — Bun native WebSocket (no socket.io)
- */
-const WS = (() => {
+const Socket = (() => {
   let ws = null;
   let reconnectTimer = null;
   let reconnectAttempts = 0;
-  const MAX_RECONNECT = 10;
-  const RECONNECT_DELAY = 3000;
-  const handlers = {};
+  const maxReconnectAttempts = 10;
+  const baseReconnectDelay = 1000;
+  const listeners = {};
+  let intentionalClose = false;
 
   function getUrl() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -15,43 +13,64 @@ const WS = (() => {
   }
 
   function connect() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
       return;
     }
 
-    ws = new WebSocket(getUrl());
+    intentionalClose = false;
+    clearTimeout(reconnectTimer);
+
+    try {
+      ws = new WebSocket(getUrl());
+    } catch (err) {
+      emit('error', { message: 'Failed to create WebSocket' });
+      scheduleReconnect();
+      return;
+    }
 
     ws.onopen = () => {
       reconnectAttempts = 0;
-      emit('_open');
+      emit('open');
     };
 
     ws.onmessage = (event) => {
       try {
-        const parsed = JSON.parse(event.data);
-        if (parsed && parsed.event) {
-          emit(parsed.event, parsed.data);
+        const msg = JSON.parse(event.data);
+        if (msg && msg.event) {
+          if (msg.event === 'ping') return; // ignore heartbeats
+          emit(msg.event, msg.data);
         }
-      } catch (err) {
-        console.error('[WS] Parse error:', err);
+      } catch {
+        // ignore parse errors
       }
     };
 
     ws.onclose = () => {
-      emit('_close');
-      scheduleReconnect();
+      emit('close');
+      if (!intentionalClose) {
+        scheduleReconnect();
+      }
     };
 
-    ws.onerror = (err) => {
-      console.error('[WS] Error:', err);
+    ws.onerror = () => {
+      emit('error', { message: 'WebSocket connection error' });
     };
   }
 
   function scheduleReconnect() {
-    if (reconnectAttempts >= MAX_RECONNECT) return;
+    if (reconnectAttempts >= maxReconnectAttempts) {
+      emit('reconnectFailed');
+      return;
+    }
+
+    const delay = Math.min(baseReconnectDelay * Math.pow(2, reconnectAttempts), 30000);
     reconnectAttempts++;
+
     clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(connect, RECONNECT_DELAY);
+    reconnectTimer = setTimeout(() => {
+      emit('reconnecting', { attempt: reconnectAttempts });
+      connect();
+    }, delay);
   }
 
   function send(action, payload = {}) {
@@ -61,31 +80,39 @@ const WS = (() => {
   }
 
   function on(event, callback) {
-    if (!handlers[event]) handlers[event] = [];
-    handlers[event].push(callback);
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(callback);
   }
 
   function off(event, callback) {
-    if (!handlers[event]) return;
-    handlers[event] = handlers[event].filter((cb) => cb !== callback);
+    if (!listeners[event]) return;
+    listeners[event] = listeners[event].filter((cb) => cb !== callback);
   }
 
   function emit(event, data) {
-    if (handlers[event]) {
-      handlers[event].forEach((cb) => cb(data));
+    if (listeners[event]) {
+      listeners[event].forEach((cb) => {
+        try { cb(data); } catch {}
+      });
     }
   }
 
-  function sendConnect(uniqueId) {
-    send('connect', { uniqueId });
+  function sendConnect(uniqueId, connectionType) {
+    send('connect', { uniqueId, connectionType: connectionType || 'auto' });
   }
 
   function sendDisconnect() {
     send('disconnect');
   }
 
-  // Auto-connect WebSocket on load
-  connect();
+  function close() {
+    intentionalClose = true;
+    clearTimeout(reconnectTimer);
+    if (ws) {
+      ws.close();
+      ws = null;
+    }
+  }
 
-  return { on, off, sendConnect, sendDisconnect, connect: connect };
+  return { connect, send, on, off, sendConnect, sendDisconnect, close };
 })();

@@ -1,161 +1,146 @@
-/**
- * Filter System — toggles + text/username/diamond filters
- */
 const Filters = (() => {
-  // Toggle elements (including subscribe and question)
-  const toggles = {
-    chat:      document.getElementById('toggleChat'),
-    gift:      document.getElementById('toggleGift'),
-    like:      document.getElementById('toggleLike'),
-    follow:    document.getElementById('toggleFollow'),
-    share:     document.getElementById('toggleShare'),
-    join:      document.getElementById('toggleJoin'),
-    subscribe: document.getElementById('toggleSubscribe'),
-    question:  document.getElementById('toggleQuestion'),
-  };
-
-  // Filter input elements
-  const textFilterInput     = document.getElementById('textFilter');
-  const usernameFilterInput = document.getElementById('usernameFilter');
-  const minDiamondInput     = document.getElementById('minDiamondFilter');
-  const clearTextBtn        = document.getElementById('clearTextFilter');
-  const clearUsernameBtn    = document.getElementById('clearUsernameFilter');
-
-  // Current filter state
-  const state = {
-    enabledEvents: {
-      chat: true,
-      gift: true,
-      like: true,
-      follow: true,
-      share: true,
-      join: true,
-      subscribe: true,
-      question: true,
-    },
-    textFilter: '',
-    usernameFilter: '',
-    minGiftDiamonds: 0,
-  };
-
-  // Callbacks
   let onChangeCallback = null;
 
-  // =============================================
-  // Initialize
-  // =============================================
+  const state = {
+    chat: true,
+    gift: true,
+    like: true,
+    follow: true,
+    share: true,
+    join: true,
+    subscribe: true,
+    question: true,
+    textFilter: '',
+    usernameFilter: '',
+    minDiamonds: 0,
+  };
+
   function init(onChange) {
     onChangeCallback = onChange;
 
-    // Toggle listeners
-    Object.entries(toggles).forEach(([key, el]) => {
-      if (!el) return; // Guard against missing DOM elements
+    const toggles = {
+      toggleChat: 'chat',
+      toggleGift: 'gift',
+      toggleLike: 'like',
+      toggleFollow: 'follow',
+      toggleShare: 'share',
+      toggleJoin: 'join',
+      toggleSubscribe: 'subscribe',
+      toggleQuestion: 'question',
+    };
+
+    for (const [id, key] of Object.entries(toggles)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
       el.addEventListener('change', () => {
-        state.enabledEvents[key] = el.checked;
-        notifyChange();
+        state[key] = el.checked;
         refilterExisting();
+        notifyChange();
       });
-    });
+    }
 
-    // Text filter
-    textFilterInput.addEventListener('input', debounce(() => {
-      state.textFilter = textFilterInput.value.trim().toLowerCase();
-      clearTextBtn.classList.toggle('hidden', !state.textFilter);
-      refilterExisting();
-    }, 200));
+    const textFilterEl = document.getElementById('textFilter');
+    const clearTextBtn = document.getElementById('clearTextFilter');
+    if (textFilterEl) {
+      textFilterEl.addEventListener('input', debounce(() => {
+        state.textFilter = textFilterEl.value.trim().toLowerCase();
+        if (clearTextBtn) clearTextBtn.classList.toggle('hidden', !state.textFilter);
+        refilterExisting();
+        notifyChange();
+      }, 200));
+    }
+    if (clearTextBtn) {
+      clearTextBtn.addEventListener('click', () => {
+        if (textFilterEl) textFilterEl.value = '';
+        state.textFilter = '';
+        clearTextBtn.classList.add('hidden');
+        refilterExisting();
+        notifyChange();
+      });
+    }
 
-    clearTextBtn.addEventListener('click', () => {
-      textFilterInput.value = '';
-      state.textFilter = '';
-      clearTextBtn.classList.add('hidden');
-      refilterExisting();
-    });
+    const usernameFilterEl = document.getElementById('usernameFilter');
+    const clearUsernameBtn = document.getElementById('clearUsernameFilter');
+    if (usernameFilterEl) {
+      usernameFilterEl.addEventListener('input', debounce(() => {
+        state.usernameFilter = usernameFilterEl.value.trim().toLowerCase();
+        if (clearUsernameBtn) clearUsernameBtn.classList.toggle('hidden', !state.usernameFilter);
+        refilterExisting();
+        notifyChange();
+      }, 200));
+    }
+    if (clearUsernameBtn) {
+      clearUsernameBtn.addEventListener('click', () => {
+        if (usernameFilterEl) usernameFilterEl.value = '';
+        state.usernameFilter = '';
+        clearUsernameBtn.classList.add('hidden');
+        refilterExisting();
+        notifyChange();
+      });
+    }
 
-    // Username filter
-    usernameFilterInput.addEventListener('input', debounce(() => {
-      state.usernameFilter = usernameFilterInput.value.trim().toLowerCase();
-      clearUsernameBtn.classList.toggle('hidden', !state.usernameFilter);
-      refilterExisting();
-    }, 200));
-
-    clearUsernameBtn.addEventListener('click', () => {
-      usernameFilterInput.value = '';
-      state.usernameFilter = '';
-      clearUsernameBtn.classList.add('hidden');
-      refilterExisting();
-    });
-
-    // Min diamond filter
-    minDiamondInput.addEventListener('input', debounce(() => {
-      state.minGiftDiamonds = parseInt(minDiamondInput.value, 10) || 0;
-      refilterExisting();
-    }, 300));
+    const minDiamondEl = document.getElementById('minDiamondFilter');
+    if (minDiamondEl) {
+      minDiamondEl.addEventListener('input', debounce(() => {
+        state.minDiamonds = Math.max(0, parseInt(minDiamondEl.value, 10) || 0);
+        refilterExisting();
+        notifyChange();
+      }, 200));
+    }
   }
 
-  // =============================================
-  // Filter Logic
-  // =============================================
-
-  /**
-   * Check if a message should be visible given current filters.
-   * @param {string} eventType - chat|gift|like|follow|share|join|subscribe|question
-   * @param {object} data - The event data
-   * @returns {boolean} true = show, false = hide
-   */
   function shouldShow(eventType, data) {
-    // 1. Toggle check
-    if (state.enabledEvents[eventType] === false) {
+    // 1. Event type toggle
+    if (eventType === 'member') {
+      if (!state.join) return false;
+    } else if (state[eventType] === false) {
       return false;
     }
 
     // 2. Username filter
     if (state.usernameFilter) {
-      const username = (data.uniqueId || '').toLowerCase();
-      const nickname = (data.nickname || '').toLowerCase();
-      if (
-        !username.includes(state.usernameFilter) &&
-        !nickname.includes(state.usernameFilter)
-      ) {
+      const username = (data?.uniqueId || '').toLowerCase();
+      const nickname = (data?.nickname || '').toLowerCase();
+      if (!username.includes(state.usernameFilter) && !nickname.includes(state.usernameFilter)) {
         return false;
       }
     }
 
-    // 3. Text filter (only for chat and question)
+    // 3. Text filter (for chat and question)
     if (state.textFilter && (eventType === 'chat' || eventType === 'question')) {
-      const text = (data.comment || data.questionText || '').toLowerCase();
-      if (!text.includes(state.textFilter)) {
-        return false;
-      }
+      const text = (data?.comment || data?.questionText || '').toLowerCase();
+      if (!text.includes(state.textFilter)) return false;
     }
 
-    // 4. Min diamond filter (only for gifts)
-    if (eventType === 'gift' && state.minGiftDiamonds > 0) {
-      const totalDiamonds = (data.diamondCount || 0) * (data.repeatCount || 1);
-      if (totalDiamonds < state.minGiftDiamonds) {
-        return false;
-      }
+    // 4. Min diamond filter (for gifts)
+    if (eventType === 'gift' && state.minDiamonds > 0) {
+      const diamonds = (data?.diamondCount || 0) * (data?.repeatCount || 1);
+      if (diamonds < state.minDiamonds) return false;
     }
 
     return true;
   }
 
-  /**
-   * Re-filter all existing messages in the DOM
-   */
   function refilterExisting() {
-    // Re-filter chat messages
-    const chatMessages = document.querySelectorAll('.chat-message[data-event-type]');
-    chatMessages.forEach((el) => {
-      const type = el.dataset.eventType;
-      const data = JSON.parse(el.dataset.eventData || '{}');
+    document.querySelectorAll('.chat-message').forEach((el) => {
+      const type = el.dataset.type || 'chat';
+      const data = {
+        uniqueId: el.dataset.uniqueId || '',
+        nickname: el.dataset.nickname || '',
+        comment: el.dataset.comment || '',
+      };
       el.classList.toggle('filtered-out', !shouldShow(type, data));
     });
 
-    // Re-filter event items
-    const eventItems = document.querySelectorAll('.event-item[data-event-type]');
-    eventItems.forEach((el) => {
-      const type = el.dataset.eventType;
-      const data = JSON.parse(el.dataset.eventData || '{}');
+    document.querySelectorAll('.event-item').forEach((el) => {
+      const type = el.dataset.type || '';
+      const data = {
+        uniqueId: el.dataset.uniqueId || '',
+        nickname: el.dataset.nickname || '',
+        diamondCount: parseInt(el.dataset.diamonds || '0', 10),
+        repeatCount: parseInt(el.dataset.repeat || '1', 10),
+        questionText: el.dataset.questionText || '',
+      };
       el.classList.toggle('filtered-out', !shouldShow(type, data));
     });
   }
@@ -168,9 +153,6 @@ const Filters = (() => {
     return { ...state };
   }
 
-  // =============================================
-  // Utility
-  // =============================================
   function debounce(fn, delay) {
     let timer;
     return (...args) => {

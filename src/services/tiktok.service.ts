@@ -1,109 +1,77 @@
 import { WebcastPushConnection } from "tiktok-live-connector";
 import { config } from "../config";
-import type { StreamStats } from "../types";
+import type { ConnectionType, StreamStats } from "../types";
 import { logger } from "../utils/logger";
 import { cleanUsername, parseError } from "../utils/sanitize";
 import type { WebSocketService } from "./websocket.service";
 
 export class TikTokService {
-  private connection: any = null;
+  private connection: WebcastPushConnection | null = null;
   private wsService: WebSocketService;
-  private isConnecting = false;
-  private lastConnectionAttempt = 0;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectAttempts = 0;
-  private isReconnecting = false;
-
-  public stats: StreamStats = this.defaultStats();
+  private connected = false;
+  private currentUniqueId: string | null = null;
+  private stats: StreamStats = this.defaultStats();
+  private connectLock = false;
 
   constructor(wsService: WebSocketService) {
     this.wsService = wsService;
   }
 
-  // =============================================
-  // Public Methods
-  // =============================================
-
-  async connect(uniqueId: string, options: Record<string, any> = {}): Promise<{ success: boolean; message: string }> {
-    // Rate limiting
-    const now = Date.now();
-    if (now - this.lastConnectionAttempt < config.connection.cooldownMs) {
-      return { success: false, message: "Please wait before reconnecting." };
-    }
-    this.lastConnectionAttempt = now;
-
-    if (this.isConnecting) {
-      return { success: false, message: "Already connecting. Please wait." };
+  async connect(uniqueId: string, options: Record<string, any> = {}): Promise<void> {
+    if (this.connectLock) {
+      throw new Error("Connection already in progress");
     }
 
-    // Cleanup previous connection (but preserve reconnect state if reconnecting)
-    const wasReconnecting = this.isReconnecting;
-    const savedReconnectAttempts = this.reconnectAttempts;
-    this.disconnectInternal();
-
-    uniqueId = cleanUsername(uniqueId);
-    if (!uniqueId) {
-      return { success: false, message: "Please provide a valid username." };
-    }
-
-    this.isConnecting = true;
-
-    // Only reset reconnect attempts for user-initiated connections, not auto-reconnects
-    if (!wasReconnecting) {
-      this.reconnectAttempts = 0;
-    } else {
-      this.reconnectAttempts = savedReconnectAttempts;
-    }
-    this.isReconnecting = false;
+    this.connectLock = true;
 
     try {
-      const connectionOptions: Record<string, any> = {
-        enableExtendedGiftInfo: config.tiktok.enableExtendedGiftInfo,
-        requestPollingIntervalMs: config.tiktok.requestPollingIntervalMs,
-        ...options,
-      };
-
-      if (config.tiktok.sessionId) {
-        connectionOptions.sessionId = config.tiktok.sessionId;
+      if (this.connected) {
+        this.disconnectInternal();
       }
 
-      this.connection = new WebcastPushConnection(uniqueId, connectionOptions);
-      this.registerEvents(uniqueId);
+      const cleaned = cleanUsername(uniqueId);
+      if (!cleaned) {
+        throw new Error("Invalid username");
+      }
 
-      const state = await this.connection.connect();
+      this.stats = this.defaultStats();
+      this.stats.uniqueId = cleaned;
+      this.currentUniqueId = cleaned;
 
-      logger.tiktok(`Connected to @${uniqueId} | Room ID: ${state.roomId}`);
+      logger.tiktok(`Connecting to @${cleaned} via TikTok-Live-Connector...`);
 
+      this.connection = new WebcastPushConnection(cleaned, {
+        ...config.connector,
+        ...options,
+      });
+
+      this.registerEvents(cleaned);
+
+      const state = await Promise.race([
+        this.connection.connect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Connection timeout")), config.connection.connectorTimeoutMs)
+        ),
+      ]);
+
+      this.connected = true;
       this.stats.connectedSince = new Date().toISOString();
-      this.stats.uniqueId = uniqueId;
-      this.isConnecting = false;
-      this.reconnectAttempts = 0; // Reset on successful connection
+
+      logger.success(`Connected to @${cleaned} via TikTok-Live-Connector`);
+      logger.tiktok(`Room state:`, state);
 
       this.wsService.broadcast("connected", {
-        uniqueId,
-        roomId: state.roomId,
+        uniqueId: cleaned,
+        method: "connector",
+        state,
       });
-
-      return { success: true, message: `Connected to @${uniqueId}` };
-    } catch (err: any) {
-      this.isConnecting = false;
-      const errorMessage = parseError(err);
-      logger.error(`Connection failed for @${uniqueId}: ${errorMessage}`);
-
-      this.wsService.broadcast("disconnected", {
-        uniqueId,
-        message: errorMessage,
-      });
-
-      return { success: false, message: errorMessage };
+    } finally {
+      this.connectLock = false;
     }
   }
 
   disconnect(): void {
-    this.reconnectAttempts = 0;
-    this.isReconnecting = false;
     this.disconnectInternal();
-    this.stats = this.defaultStats();
   }
 
   getStats(): StreamStats {
@@ -111,37 +79,46 @@ export class TikTokService {
   }
 
   isConnected(): boolean {
-    return this.connection !== null && !this.isConnecting;
+    return this.connected;
   }
 
-  // =============================================
-  // Private Methods
-  // =============================================
-
-  /**
-   * Internal disconnect — cleans up connection and timers but does NOT reset
-   * reconnect state or stats (those are managed by callers).
-   */
-  private disconnectInternal(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+  getConnectorVersion(): string | null {
+    try {
+      const pkg = require("tiktok-live-connector/package.json");
+      return pkg.version || null;
+    } catch {
+      return null;
     }
+  }
 
+  private disconnectInternal(): void {
     if (this.connection) {
       try {
         this.connection.disconnect();
-      } catch {}
+      } catch (err) {
+        logger.warn(`Disconnect error: ${parseError(err)}`);
+      }
       this.connection = null;
     }
 
-    this.isConnecting = false;
+    const wasConnected = this.connected;
+    this.connected = false;
+
+    if (wasConnected && this.currentUniqueId) {
+      logger.tiktok(`Disconnected from @${this.currentUniqueId}`);
+      this.wsService.broadcast("disconnected", {
+        method: "connector",
+        uniqueId: this.currentUniqueId,
+      });
+    }
+
+    this.currentUniqueId = null;
+    this.stats = this.defaultStats();
   }
 
   private registerEvents(uniqueId: string): void {
     if (!this.connection) return;
 
-    // Chat
     this.connection.on("chat", (data: any) => {
       this.stats.chatCount++;
       this.wsService.broadcast("chat", {
@@ -150,75 +127,64 @@ export class TikTokService {
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
         comment: data.comment,
-        followRole: data.followRole,
+        followRole: data.followRole || 0,
         userBadges: data.userBadges || [],
         isModerator: data.isModerator || false,
         isNewGifter: data.isNewGifter || false,
         isSubscriber: data.isSubscriber || false,
         topGifterRank: data.topGifterRank || null,
         teamMemberLevel: data.teamMemberLevel || 0,
-        msgId: data.msgId,
-        createTime: data.createTime,
+        msgId: data.msgId || crypto.randomUUID(),
+        createTime: data.createTime || new Date().toISOString(),
       });
     });
 
-    // Gift
     this.connection.on("gift", (data: any) => {
-      if (data.diamondCount) {
-        this.stats.diamondsCount += data.diamondCount * (data.repeatCount || 1);
-      }
+      if (data.giftType === 1 && !data.repeatEnd) return;
       this.stats.giftCount++;
-
+      this.stats.diamondsCount += (data.diamondCount || 0) * (data.repeatCount || 1);
       this.wsService.broadcast("gift", {
         type: "gift",
         uniqueId: data.uniqueId,
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
         giftId: data.giftId,
-        giftName: data.giftName || "Unknown Gift",
-        giftPictureUrl: data.giftPictureUrl,
+        giftName: data.giftName || "Gift",
+        giftPictureUrl: data.giftPictureUrl || "",
         diamondCount: data.diamondCount || 0,
         repeatCount: data.repeatCount || 1,
-        repeatEnd: data.repeatEnd,
-        giftType: data.giftType,
-        describe: data.describe,
+        repeatEnd: data.repeatEnd || true,
+        giftType: data.giftType || 1,
+        describe: data.describe || "",
       });
     });
 
-    // Like
     this.connection.on("like", (data: any) => {
-      this.stats.totalLikes += data.likeCount || 0;
+      this.stats.totalLikes += data.likeCount || 1;
       this.stats.likeCount = data.totalLikeCount || this.stats.totalLikes;
-
       this.wsService.broadcast("like", {
         type: "like",
         uniqueId: data.uniqueId,
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
-        likeCount: data.likeCount,
-        totalLikeCount: data.totalLikeCount,
+        likeCount: data.likeCount || 1,
+        totalLikeCount: data.totalLikeCount || 0,
       });
     });
 
-    // Member join
     this.connection.on("member", (data: any) => {
       this.stats.joinCount++;
-
       this.wsService.broadcast("member", {
         type: "member",
         uniqueId: data.uniqueId,
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
-        action: data.actionId,
+        action: data.actionId || 1,
       });
     });
 
-    // Social (follow & share)
     this.connection.on("social", (data: any) => {
-      const isFollow =
-        data.displayType === "pm_mt_msg_viewer" || (data.label && data.label.toLowerCase().includes("follow"));
-
-      if (isFollow) {
+      if (data.displayType?.includes("follow")) {
         this.stats.followerCount++;
         this.wsService.broadcast("follow", {
           type: "follow",
@@ -226,94 +192,76 @@ export class TikTokService {
           nickname: data.nickname,
           profilePictureUrl: data.profilePictureUrl,
         });
-      } else {
+      } else if (data.displayType?.includes("share")) {
         this.stats.shareCount++;
         this.wsService.broadcast("share", {
           type: "share",
           uniqueId: data.uniqueId,
           nickname: data.nickname,
           profilePictureUrl: data.profilePictureUrl,
-          label: data.label,
         });
       }
     });
 
-    // Subscribe
     this.connection.on("subscribe", (data: any) => {
       this.wsService.broadcast("subscribe", {
         type: "subscribe",
         uniqueId: data.uniqueId,
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
-        subMonth: data.subMonth,
+        subMonth: data.subMonth || 0,
       });
     });
 
-    // Room user count
-    this.connection.on("roomUser", (data: any) => {
-      this.stats.viewerCount = data.viewerCount || 0;
-
-      this.wsService.broadcast("roomUser", {
-        type: "roomUser",
-        viewerCount: data.viewerCount,
-        topViewers: data.topViewers || [],
-      });
-    });
-
-    // Question
     this.connection.on("questionNew", (data: any) => {
       this.wsService.broadcast("question", {
         type: "question",
         uniqueId: data.uniqueId,
         nickname: data.nickname,
         profilePictureUrl: data.profilePictureUrl,
-        questionText: data.questionText,
+        questionText: data.questionText || "",
       });
     });
 
-    // Stream end
+    this.connection.on("roomUser", (data: any) => {
+      this.stats.viewerCount = data.viewerCount || 0;
+      this.wsService.broadcast("roomUser", {
+        type: "roomUser",
+        viewerCount: data.viewerCount || 0,
+        topViewers: data.topViewers || [],
+      });
+    });
+
     this.connection.on("streamEnd", (data: any) => {
-      logger.tiktok(`Stream ended for @${uniqueId}`);
+      this.handleDisconnect(uniqueId, "Stream ended");
       this.wsService.broadcast("streamEnd", {
         type: "streamEnd",
-        action: data?.action,
+        action: data?.action || 3,
       });
-      this.handleDisconnect(uniqueId, "Stream has ended");
     });
 
-    // Error
     this.connection.on("error", (err: any) => {
-      logger.error(`TikTok error: ${err.message || err}`);
+      logger.error(`TikTok-Live-Connector error: ${parseError(err)}`);
       this.wsService.broadcast("error", {
-        message: `Connection error: ${err.message || "Unknown error"}`,
+        message: parseError(err),
+        method: "connector",
       });
     });
 
-    // Disconnected
     this.connection.on("disconnected", () => {
-      logger.tiktok(`Disconnected from @${uniqueId}`);
-      this.handleDisconnect(uniqueId, "Connection lost");
+      this.handleDisconnect(uniqueId, "Disconnected by server");
     });
   }
 
   private handleDisconnect(uniqueId: string, reason: string): void {
+    logger.tiktok(`Disconnected from @${uniqueId}: ${reason}`);
+    this.connected = false;
+    this.connection = null;
     this.wsService.broadcast("disconnected", {
       uniqueId,
-      message: reason,
+      reason,
+      method: "connector",
     });
-
-    // Auto-reconnect only on unexpected disconnects
-    if (this.reconnectAttempts < config.connection.maxReconnectAttempts && reason === "Connection lost") {
-      this.reconnectAttempts++;
-      this.isReconnecting = true;
-      logger.info(
-        `Attempting reconnect ${this.reconnectAttempts}/${config.connection.maxReconnectAttempts} for @${uniqueId}...`,
-      );
-
-      this.reconnectTimer = setTimeout(() => {
-        this.connect(uniqueId);
-      }, config.connection.reconnectDelayMs);
-    }
   }
 
   private defaultStats(): StreamStats {

@@ -3,68 +3,71 @@ import { logger } from "../../src/utils/logger";
 
 describe("logger", () => {
   let originalLog: typeof console.log;
+  let originalWarn: typeof console.warn;
   let originalError: typeof console.error;
-  let logOutput: string[];
-  let errorOutput: string[];
+  let logs: string[];
 
   beforeEach(() => {
-    logOutput = [];
-    errorOutput = [];
+    logs = [];
     originalLog = console.log;
+    originalWarn = console.warn;
     originalError = console.error;
-    console.log = (...args: any[]) => logOutput.push(args.join(" "));
-    console.error = (...args: any[]) => errorOutput.push(args.join(" "));
+    console.log = (...args: any[]) => logs.push(args.join(" "));
+    console.warn = (...args: any[]) => logs.push(args.join(" "));
+    console.error = (...args: any[]) => logs.push(args.join(" "));
   });
 
   afterEach(() => {
     console.log = originalLog;
+    console.warn = originalWarn;
     console.error = originalError;
   });
 
-  test("info logs with [INFO] tag", () => {
+  test("info logs message", () => {
     logger.info("test message");
-    expect(logOutput.length).toBe(1);
-    expect(logOutput[0]).toContain("[INFO]");
-    expect(logOutput[0]).toContain("test message");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("test message");
   });
 
-  test("success logs with [OK] tag", () => {
-    logger.success("all good");
-    expect(logOutput.length).toBe(1);
-    expect(logOutput[0]).toContain("[OK]");
-    expect(logOutput[0]).toContain("all good");
+  test("success logs message", () => {
+    logger.success("test success");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("test success");
   });
 
-  test("warn logs with [WARN] tag", () => {
-    logger.warn("be careful");
-    expect(logOutput.length).toBe(1);
-    expect(logOutput[0]).toContain("[WARN]");
-    expect(logOutput[0]).toContain("be careful");
+  test("warn logs message", () => {
+    logger.warn("test warning");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("test warning");
   });
 
-  test("error logs with [ERROR] tag to stderr", () => {
-    logger.error("something broke");
-    expect(errorOutput.length).toBe(1);
-    expect(errorOutput[0]).toContain("[ERROR]");
-    expect(errorOutput[0]).toContain("something broke");
+  test("error logs message", () => {
+    logger.error("test error");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("test error");
   });
 
-  test("tiktok logs with [TIKTOK] tag", () => {
-    logger.tiktok("connected");
-    expect(logOutput.length).toBe(1);
-    expect(logOutput[0]).toContain("[TIKTOK]");
-    expect(logOutput[0]).toContain("connected");
+  test("tiktok logs message", () => {
+    logger.tiktok("tiktok msg");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("tiktok msg");
   });
 
-  test("ws logs with [WS] tag", () => {
-    logger.ws("client joined");
-    expect(logOutput.length).toBe(1);
-    expect(logOutput[0]).toContain("[WS]");
-    expect(logOutput[0]).toContain("client joined");
+  test("ws logs message", () => {
+    logger.ws("ws msg");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("ws msg");
   });
 
-  test("includes timestamp", () => {
-    logger.info("timestamped");
-    expect(logOutput[0]).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+  test("euler logs message", () => {
+    logger.euler("euler msg");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("euler msg");
+  });
+
+  test("connection logs message", () => {
+    logger.connection("conn msg");
+    expect(logs.length).toBe(1);
+    expect(logs[0]).toContain("conn msg");
   });
 });

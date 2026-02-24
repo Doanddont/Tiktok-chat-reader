@@ -1,136 +1,96 @@
 import { describe, expect, test } from "bun:test";
-import { cleanUsername, parseError, sanitizeHtml } from "../../src/utils/sanitize";
+import { cleanUsername, isValidUsername, parseError, sanitizeHtml } from "../../src/utils/sanitize";
 
 describe("sanitizeHtml", () => {
-  test("escapes HTML entities", () => {
-    expect(sanitizeHtml("<script>alert('xss')</script>")).toBe(
-      "&lt;script&gt;alert(&#39;xss&#39;)&lt;&#x2F;script&gt;",
+  test("escapes HTML special chars", () => {
+    expect(sanitizeHtml('<script>alert("xss")</script>')).toBe(
+      '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
     );
   });
 
   test("escapes ampersands", () => {
-    expect(sanitizeHtml("Tom & Jerry")).toBe("Tom &amp; Jerry");
+    expect(sanitizeHtml("foo & bar")).toBe("foo &amp; bar");
   });
 
-  test("escapes double quotes", () => {
-    expect(sanitizeHtml('say "hello"')).toBe("say &quot;hello&quot;");
+  test("escapes single quotes", () => {
+    expect(sanitizeHtml("it's")).toBe("it&#039;s");
   });
 
-  test("escapes backticks", () => {
-    expect(sanitizeHtml("use `code`")).toBe("use &#x60;code&#x60;");
+  test("returns empty for non-string", () => {
+    expect(sanitizeHtml(null as any)).toBe("");
+    expect(sanitizeHtml(undefined as any)).toBe("");
+    expect(sanitizeHtml(123 as any)).toBe("");
   });
 
-  test("escapes equals sign", () => {
-    expect(sanitizeHtml("a=b")).toBe("a&#x3D;b");
-  });
-
-  test("returns empty string for empty input", () => {
-    expect(sanitizeHtml("")).toBe("");
-  });
-
-  test("handles plain text without escaping", () => {
-    expect(sanitizeHtml("Hello World 123")).toBe("Hello World 123");
-  });
-
-  test("handles unicode and emojis", () => {
-    expect(sanitizeHtml("Hello 🔥 世界")).toBe("Hello 🔥 世界");
-  });
-
-  test("coerces non-string input to string", () => {
-    expect(sanitizeHtml(123 as any)).toBe("123");
-    expect(sanitizeHtml(null as any)).toBe("null");
-    expect(sanitizeHtml(undefined as any)).toBe("undefined");
+  test("passes through safe strings", () => {
+    expect(sanitizeHtml("hello world")).toBe("hello world");
   });
 });
 
 describe("cleanUsername", () => {
   test("removes @ prefix", () => {
-    expect(cleanUsername("@charlidamelio")).toBe("charlidamelio");
+    expect(cleanUsername("@testuser")).toBe("testuser");
   });
 
-  test("trims whitespace", () => {
-    expect(cleanUsername("  charlidamelio  ")).toBe("charlidamelio");
-  });
-
-  test("lowercases username", () => {
-    expect(cleanUsername("CharliDamelio")).toBe("charlidamelio");
-  });
-
-  test("handles @ with spaces", () => {
-    expect(cleanUsername("  @CharliDamelio  ")).toBe("charlidamelio");
+  test("trims and lowercases", () => {
+    expect(cleanUsername("  TestUser  ")).toBe("testuser");
   });
 
   test("handles empty string", () => {
     expect(cleanUsername("")).toBe("");
   });
 
-  test("handles just @", () => {
-    expect(cleanUsername("@")).toBe("");
+  test("returns empty for non-string", () => {
+    expect(cleanUsername(null as any)).toBe("");
+    expect(cleanUsername(undefined as any)).toBe("");
+  });
+});
+
+describe("isValidUsername", () => {
+  test("accepts valid usernames", () => {
+    expect(isValidUsername("testuser")).toBe(true);
+    expect(isValidUsername("test.user")).toBe(true);
+    expect(isValidUsername("test_user")).toBe(true);
+    expect(isValidUsername("test123")).toBe(true);
   });
 
-  test("handles username without @", () => {
-    expect(cleanUsername("username123")).toBe("username123");
+  test("rejects invalid usernames", () => {
+    expect(isValidUsername("")).toBe(false);
+    expect(isValidUsername("test user")).toBe(false);
+    expect(isValidUsername("test@user")).toBe(false);
+    expect(isValidUsername("test<script>")).toBe(false);
+  });
+
+  test("handles @ prefix", () => {
+    expect(isValidUsername("@testuser")).toBe(true);
+  });
+
+  test("rejects too long usernames", () => {
+    expect(isValidUsername("a".repeat(51))).toBe(false);
+  });
+
+  test("returns false for non-string", () => {
+    expect(isValidUsername(null as any)).toBe(false);
+    expect(isValidUsername(undefined as any)).toBe(false);
   });
 });
 
 describe("parseError", () => {
-  test("parses LIVE ended error", () => {
-    const result = parseError(new Error("LIVE has ended"));
-    expect(result).toContain("live stream has ended");
+  test("returns string errors as-is", () => {
+    expect(parseError("some error")).toBe("some error");
   });
 
-  test("parses stream ended error", () => {
-    const result = parseError(new Error("The stream has ended"));
-    expect(result).toContain("live stream has ended");
+  test("extracts message from Error", () => {
+    expect(parseError(new Error("test error"))).toBe("test error");
   });
 
-  test("parses not found error", () => {
-    const result = parseError(new Error("User not found"));
-    expect(result).toContain("not found");
+  test("extracts message from object", () => {
+    expect(parseError({ message: "obj error" })).toBe("obj error");
   });
 
-  test("parses 404 error", () => {
-    const result = parseError(new Error("Request failed with status 404"));
-    expect(result).toContain("not found");
-  });
-
-  test("parses rate limit error", () => {
-    const result = parseError(new Error("rate limit exceeded"));
-    expect(result).toContain("Rate limited");
-  });
-
-  test("parses 429 error", () => {
-    const result = parseError(new Error("Request failed with status 429"));
-    expect(result).toContain("Rate limited");
-  });
-
-  test("parses network error ENOTFOUND", () => {
-    const result = parseError(new Error("getaddrinfo ENOTFOUND"));
-    expect(result).toContain("Network error");
-  });
-
-  test("parses network error ECONNREFUSED", () => {
-    const result = parseError(new Error("connect ECONNREFUSED"));
-    expect(result).toContain("Network error");
-  });
-
-  test("parses CAPTCHA error", () => {
-    const result = parseError(new Error("CAPTCHA required"));
-    expect(result).toContain("CAPTCHA");
-  });
-
-  test("returns raw message for unknown errors", () => {
-    const result = parseError(new Error("Something weird happened"));
-    expect(result).toBe("Something weird happened");
-  });
-
-  test("handles non-Error objects", () => {
-    const result = parseError("string error");
-    expect(result).toBe("string error");
-  });
-
-  test("handles null/undefined", () => {
-    const result = parseError(null);
-    expect(result).toBe("null");
+  test("returns fallback for unknown types", () => {
+    expect(parseError(null)).toBe("Unknown error");
+    expect(parseError(undefined)).toBe("Unknown error");
+    expect(parseError(42)).toBe("Unknown error");
   });
 });

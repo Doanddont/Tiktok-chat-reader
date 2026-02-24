@@ -1,40 +1,28 @@
-const ENTITY_MAP: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-  "/": "&#x2F;",
-  "`": "&#x60;",
-  "=": "&#x3D;",
-};
-
 export function sanitizeHtml(str: string): string {
-  return String(str).replace(/[&<>"'`=\/]/g, (s) => ENTITY_MAP[s] || s);
+  if (typeof str !== "string") return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 export function cleanUsername(username: string): string {
+  if (typeof username !== "string") return "";
   return username.replace(/^@/, "").trim().toLowerCase();
 }
 
 export function parseError(err: any): string {
-  const message = err?.message || String(err);
+  if (typeof err === "string") return err;
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) return String(err.message);
+  return "Unknown error";
+}
 
-  if (message.includes("LIVE has ended") || message.includes("ended")) {
-    return "The live stream has ended or the user is not currently live.";
-  }
-  if (message.includes("not found") || message.includes("404")) {
-    return "User not found. Please check the username.";
-  }
-  if (message.includes("rate limit") || message.includes("429")) {
-    return "Rate limited by TikTok. Please wait and try again.";
-  }
-  if (message.includes("ENOTFOUND") || message.includes("ECONNREFUSED")) {
-    return "Network error. Check your internet connection.";
-  }
-  if (message.includes("CAPTCHA")) {
-    return "TikTok is showing a CAPTCHA. Try using a session ID.";
-  }
-
-  return message;
+export function isValidUsername(username: string): boolean {
+  if (typeof username !== "string") return false;
+  const cleaned = cleanUsername(username);
+  if (cleaned.length === 0 || cleaned.length > 50) return false;
+  return /^[a-zA-Z0-9_.]+$/.test(cleaned);
 }

@@ -1,6 +1,3 @@
-// =============================================
-// TikTok Event Types
-// =============================================
 export interface TikTokUser {
   uniqueId: string;
   nickname: string;
@@ -132,13 +129,11 @@ export type TikTokEvent =
   | RoomUserMessage
   | StreamEndMessage;
 
-// =============================================
-// WebSocket Message Types
-// =============================================
 export interface WSClientMessage {
   action: "connect" | "disconnect";
   uniqueId?: string;
   options?: Record<string, any>;
+  connectionType?: ConnectionType;
 }
 
 export interface WSServerMessage {
@@ -146,9 +141,6 @@ export interface WSServerMessage {
   data: any;
 }
 
-// =============================================
-// Stats
-// =============================================
 export interface StreamStats {
   viewerCount: number;
   likeCount: number;
@@ -163,9 +155,6 @@ export interface StreamStats {
   uniqueId: string | null;
 }
 
-// =============================================
-// Filter Types
-// =============================================
 export type EventFilterType = "chat" | "gift" | "like" | "follow" | "share" | "join" | "subscribe" | "question";
 
 export interface FilterConfig {
@@ -175,4 +164,25 @@ export interface FilterConfig {
   minGiftDiamonds: number;
   showModOnly: boolean;
   showSubOnly: boolean;
+}
+
+// New types for dual connection support
+export type ConnectionType = "connector" | "euler" | "auto";
+
+export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "reconnecting" | "failed";
+
+export interface ConnectionState {
+  type: ConnectionType;
+  activeMethod: "connector" | "euler" | null;
+  status: ConnectionStatus;
+  uniqueId: string | null;
+  connectedSince: string | null;
+  failureReason: string | null;
+  fallbackUsed: boolean;
+}
+
+export interface ConnectionInfo {
+  state: ConnectionState;
+  stats: StreamStats;
+  connectorVersion: string | null;
 }

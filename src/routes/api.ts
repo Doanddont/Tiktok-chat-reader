@@ -1,43 +1,46 @@
 import { Hono } from "hono";
-import type { TikTokService } from "../services/tiktok.service";
+import type { ConnectionManager } from "../services/connection.manager";
 
-export function createApiRoutes(tiktokService: TikTokService): Hono {
+export function createApiRoutes(connectionManager: ConnectionManager): Hono {
   const api = new Hono();
 
-  // Connect to a TikTok stream
-  api.post("/connect", async (c) => {
-    const body = await c.req.json();
-    const { uniqueId, options } = body;
-
-    if (!uniqueId || typeof uniqueId !== "string") {
-      return c.json({ success: false, message: "uniqueId is required" }, 400);
-    }
-
-    const result = await tiktokService.connect(uniqueId, options || {});
-    return c.json(result);
+  api.get("/status", (c) => {
+    const info = connectionManager.getConnectionInfo();
+    return c.json({
+      connected: connectionManager.isConnected(),
+      connection: info.state,
+      stats: info.stats,
+      connectorVersion: info.connectorVersion,
+    });
   });
 
-  // Disconnect
-  api.post("/disconnect", (c) => {
-    tiktokService.disconnect();
-    return c.json({ success: true, message: "Disconnected" });
-  });
-
-  // Get stats
   api.get("/stats", (c) => {
-    return c.json({
-      connected: tiktokService.isConnected(),
-      stats: tiktokService.getStats(),
-    });
+    return c.json(connectionManager.getStats());
   });
 
-  // Health check
-  api.get("/health", (c) => {
-    return c.json({
-      status: "ok",
-      uptime: process.uptime(),
-      connected: tiktokService.isConnected(),
-    });
+  api.post("/connect", async (c) => {
+    try {
+      const body = await c.req.json();
+      const { uniqueId, connectionType, options } = body;
+
+      if (!uniqueId) {
+        return c.json({ error: "uniqueId is required" }, 400);
+      }
+
+      await connectionManager.connect(uniqueId, connectionType, options || {});
+
+      return c.json({
+        success: true,
+        connection: connectionManager.getState(),
+      });
+    } catch (err: any) {
+      return c.json({ error: err.message || "Connection failed" }, 500);
+    }
+  });
+
+  api.post("/disconnect", (c) => {
+    connectionManager.disconnect();
+    return c.json({ success: true });
   });
 
   return api;

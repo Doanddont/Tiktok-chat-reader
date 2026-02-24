@@ -3,93 +3,132 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { config } from "./config";
 import { createApiRoutes } from "./routes/api";
-import { TikTokService } from "./services/tiktok.service";
+import { ConnectionManager } from "./services/connection.manager";
 import { WebSocketService } from "./services/websocket.service";
 import { logger } from "./utils/logger";
-import { cleanUsername } from "./utils/sanitize";
+import { cleanUsername, isValidUsername } from "./utils/sanitize";
 
-// Initialize services
-const wsService = new WebSocketService();
-const tiktokService = new TikTokService(wsService);
-
-// Create Hono app
 const app = new Hono();
+const wsService = new WebSocketService();
+const connectionManager = new ConnectionManager(wsService);
 
 // API routes
-const apiRoutes = createApiRoutes(tiktokService);
+const apiRoutes = createApiRoutes(connectionManager);
 app.route("/api", apiRoutes);
 
 // Static files
 app.use("/*", serveStatic({ root: "./public" }));
 
-// Start server with WebSocket support
+// Start server
 const server = Bun.serve({
   port: config.port,
+  hostname: config.host,
+
   fetch(req, server) {
     const url = new URL(req.url);
 
-    // Upgrade WebSocket requests
+    // WebSocket upgrade
     if (url.pathname === "/ws") {
-      const upgraded = server.upgrade(req);
-      if (!upgraded) {
-        return new Response("WebSocket upgrade failed", { status: 400 });
-      }
-      return undefined;
+      const success = server.upgrade(req);
+      if (success) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
-    // Handle Hono routes
-    return app.fetch(req, server);
+    return app.fetch(req);
   },
+
   websocket: {
     open(ws: ServerWebSocket<any>) {
       wsService.addClient(ws);
+      // Send current state on connect
+      const info = connectionManager.getConnectionInfo();
+      ws.send(
+        JSON.stringify({
+          event: "init",
+          data: {
+            connected: connectionManager.isConnected(),
+            connection: info.state,
+            stats: info.stats,
+            connectorVersion: info.connectorVersion,
+          },
+        })
+      );
     },
-    message(_ws: ServerWebSocket<any>, message: string | ArrayBuffer | Buffer) {
+
+    message(ws: ServerWebSocket<any>, message: string | ArrayBuffer | Buffer) {
       try {
-        let raw: string;
-        if (typeof message === "string") {
-          raw = message;
-        } else if (message instanceof ArrayBuffer) {
-          raw = new TextDecoder().decode(message);
-        } else {
-          raw = message.toString();
+        const str = typeof message === "string" ? message : new TextDecoder().decode(message as ArrayBuffer);
+        const msg = JSON.parse(str);
+
+        if (!msg || typeof msg !== "object" || !msg.action) {
+          ws.send(JSON.stringify({ event: "error", data: { message: "Invalid message format" } }));
+          return;
         }
 
-        const data = JSON.parse(raw);
-
-        switch (data.action) {
-          case "connect":
-            if (data.uniqueId) {
-              tiktokService.connect(data.uniqueId, data.options || {});
+        switch (msg.action) {
+          case "connect": {
+            const uniqueId = msg.uniqueId ? cleanUsername(String(msg.uniqueId)) : "";
+            if (!isValidUsername(uniqueId)) {
+              ws.send(JSON.stringify({ event: "error", data: { message: "Invalid username" } }));
+              return;
             }
+
+            const connectionType = msg.connectionType || "auto";
+            const validTypes = ["connector", "euler", "auto"];
+            if (!validTypes.includes(connectionType)) {
+              ws.send(JSON.stringify({ event: "error", data: { message: "Invalid connection type" } }));
+              return;
+            }
+
+            connectionManager
+              .connect(uniqueId, connectionType, msg.options || {})
+              .catch((err) => {
+                wsService.broadcast("error", { message: err.message || "Connection failed" });
+              });
             break;
-          case "disconnect":
-            tiktokService.disconnect();
+          }
+
+          case "disconnect": {
+            connectionManager.disconnect();
             break;
+          }
+
+          case "getStatus": {
+            const info = connectionManager.getConnectionInfo();
+            ws.send(
+              JSON.stringify({
+                event: "status",
+                data: {
+                  connected: connectionManager.isConnected(),
+                  connection: info.state,
+                  stats: info.stats,
+                  connectorVersion: info.connectorVersion,
+                },
+              })
+            );
+            break;
+          }
+
           default:
-            logger.warn(`Unknown WS action: ${data.action}`);
+            ws.send(JSON.stringify({ event: "error", data: { message: `Unknown action: ${msg.action}` } }));
         }
-      } catch (err) {
-        logger.error(`Invalid WS message: ${err}`);
+      } catch (err: any) {
+        logger.error(`WebSocket message error: ${err.message}`);
+        try {
+          ws.send(JSON.stringify({ event: "error", data: { message: "Invalid message" } }));
+        } catch {}
       }
     },
+
     close(ws: ServerWebSocket<any>) {
       wsService.removeClient(ws);
     },
   },
 });
 
-logger.success(`🚀 Server running at http://localhost:${server.port}`);
-logger.info(`📡 WebSocket endpoint: ws://localhost:${server.port}/ws`);
-
-// CLI Auto-connect Logic
-const args = Bun.argv.slice(2);
-if (args.length > 0) {
-  const targetUser = cleanUsername(args[0]);
-  if (targetUser) {
-    logger.info(`CLI argument detected. Auto-connecting to @${targetUser} in 2 seconds...`);
-    setTimeout(() => {
-      tiktokService.connect(targetUser);
-    }, 2000);
-  }
-}
+// Log startup info
+const connectorVersion = connectionManager.getConnectionInfo().connectorVersion;
+logger.success(`Server running on http://${config.host}:${config.port}`);
+logger.info(`TikTok-Live-Connector version: ${connectorVersion || "unknown"}`);
+logger.info(`Default connection mode: ${config.connection.defaultType}`);
+logger.info(`Fallback enabled: ${config.connection.fallbackEnabled}`);
