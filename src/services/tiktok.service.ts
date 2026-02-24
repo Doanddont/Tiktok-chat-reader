@@ -1,6 +1,6 @@
 import { WebcastPushConnection } from "tiktok-live-connector";
 import { config } from "../config";
-import type { ConnectionType, StreamStats } from "../types";
+import type { StreamStats } from "../types";
 import { logger } from "../utils/logger";
 import { cleanUsername, parseError } from "../utils/sanitize";
 import type { WebSocketService } from "./websocket.service";
