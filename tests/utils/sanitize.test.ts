@@ -3,9 +3,7 @@ import { cleanUsername, isValidUsername, parseError, sanitizeHtml } from "../../
 
 describe("sanitizeHtml", () => {
   test("escapes HTML special chars", () => {
-    expect(sanitizeHtml('<script>alert("xss")</script>')).toBe(
-      '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
-    );
+    expect(sanitizeHtml('<script>alert("xss")</script>')).toBe("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
   });
 
   test("escapes ampersands", () => {

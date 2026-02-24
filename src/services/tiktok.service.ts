@@ -50,7 +50,7 @@ export class TikTokService {
       const state = await Promise.race([
         this.connection.connect(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Connection timeout")), config.connection.connectorTimeoutMs)
+          setTimeout(() => reject(new Error("Connection timeout")), config.connection.connectorTimeoutMs),
         ),
       ]);
 
