@@ -47,7 +47,9 @@ describe("WebSocketService", () => {
 
   test("broadcast removes dead clients", () => {
     const ws1 = createMockWS();
-    ws1.send = mock(() => { throw new Error("dead"); });
+    ws1.send = mock(() => {
+      throw new Error("dead");
+    });
     service.addClient(ws1);
 
     service.broadcast("test", {});

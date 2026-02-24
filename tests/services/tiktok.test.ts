@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { TikTokService } from "../../src/services/tiktok.service";
 import { WebSocketService } from "../../src/services/websocket.service";
 

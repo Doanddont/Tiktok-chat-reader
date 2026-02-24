@@ -1,6 +1,6 @@
 import { WebcastPushConnection } from "tiktok-live-connector";
 import { config } from "../config";
-import type { ConnectionType, StreamStats } from "../types";
+import type { StreamStats } from "../types";
 import { logger } from "../utils/logger";
 import { cleanUsername, parseError } from "../utils/sanitize";
 import type { WebSocketService } from "./websocket.service";
@@ -50,7 +50,7 @@ export class TikTokService {
       const state = await Promise.race([
         this.connection.connect(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Connection timeout")), config.connection.connectorTimeoutMs)
+          setTimeout(() => reject(new Error("Connection timeout")), config.connection.connectorTimeoutMs),
         ),
       ]);
 

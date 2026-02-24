@@ -51,7 +51,7 @@ const server = Bun.serve({
             stats: info.stats,
             connectorVersion: info.connectorVersion,
           },
-        })
+        }),
       );
     },
 
@@ -80,11 +80,9 @@ const server = Bun.serve({
               return;
             }
 
-            connectionManager
-              .connect(uniqueId, connectionType, msg.options || {})
-              .catch((err) => {
-                wsService.broadcast("error", { message: err.message || "Connection failed" });
-              });
+            connectionManager.connect(uniqueId, connectionType, msg.options || {}).catch((err) => {
+              wsService.broadcast("error", { message: err.message || "Connection failed" });
+            });
             break;
           }
 
@@ -104,7 +102,7 @@ const server = Bun.serve({
                   stats: info.stats,
                   connectorVersion: info.connectorVersion,
                 },
-              })
+              }),
             );
             break;
           }

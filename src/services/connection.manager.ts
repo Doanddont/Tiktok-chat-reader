@@ -185,9 +185,7 @@ export class ConnectionManager {
         type: "warning",
       });
     } catch (eulerErr) {
-      throw new Error(
-        `All connection methods failed. Connector: ${parseError(err)}. Euler: ${parseError(eulerErr)}`
-      );
+      throw new Error(`All connection methods failed. Connector: ${parseError(err)}. Euler: ${parseError(eulerErr)}`);
     }
   }
 

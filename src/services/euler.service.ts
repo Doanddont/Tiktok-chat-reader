@@ -124,7 +124,8 @@ export class EulerService {
 
       const html = await response.text();
 
-      const roomIdMatch = html.match(/room_id=(\d+)/) || html.match(/"roomId":"(\d+)"/) || html.match(/roomId%22%3A%22(\d+)/);
+      const roomIdMatch =
+        html.match(/room_id=(\d+)/) || html.match(/"roomId":"(\d+)"/) || html.match(/roomId%22%3A%22(\d+)/);
 
       if (!roomIdMatch) {
         logger.euler("Could not extract room ID - user may not be live");
