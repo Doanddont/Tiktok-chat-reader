@@ -11,12 +11,12 @@
     "fix": "bunx @biomejs/biome check --write ."
   },
   "dependencies": {
-    "hono": "^4.4.0",
-    "tiktok-live-connector": "^1.1.8"
+    "hono": "^4.12.2",
+    "tiktok-live-connector": "^2.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
+    "@biomejs/biome": "^2.4.4",
     "@types/bun": "latest",
-    "typescript": "^5.5.0"
+    "typescript": "^5.9.3"
   }
 }
