@@ -1,10 +1,5 @@
 import { config } from "../config";
-import type {
-  ConnectionInfo,
-  ConnectionState,
-  ConnectionType,
-  StreamStats,
-} from "../types";
+import type { ConnectionInfo, ConnectionState, ConnectionType, StreamStats } from "../types";
 import { logger } from "../utils/logger";
 import { cleanUsername, isValidUsername, parseError } from "../utils/sanitize";
 import { EulerService } from "./euler.service";
@@ -188,10 +183,7 @@ export class ConnectionManager {
   /**
    * Connects exclusively through TikTok-Live-Connector.
    */
-  private async connectViaConnector(
-    uniqueId: string,
-    options: Record<string, unknown>,
-  ): Promise<void> {
+  private async connectViaConnector(uniqueId: string, options: Record<string, unknown>): Promise<void> {
     logger.connection(`Connecting via TikTok-Live-Connector for @${uniqueId}…`);
 
     try {
@@ -228,13 +220,8 @@ export class ConnectionManager {
    * Tries TikTok-Live-Connector first, then falls back to Euler
    * if configured to do so.
    */
-  private async connectAuto(
-    uniqueId: string,
-    options: Record<string, unknown>,
-  ): Promise<void> {
-    logger.connection(
-      `Auto-connect: trying TikTok-Live-Connector first for @${uniqueId}…`,
-    );
+  private async connectAuto(uniqueId: string, options: Record<string, unknown>): Promise<void> {
+    logger.connection(`Auto-connect: trying TikTok-Live-Connector first for @${uniqueId}…`);
 
     // ── Attempt 1: TikTok-Live-Connector ──
     let connectorError: unknown;
@@ -247,22 +234,17 @@ export class ConnectionManager {
       return;
     } catch (err: unknown) {
       connectorError = err;
-      logger.warn(
-        `Auto-connect: TikTok-Live-Connector failed: ${parseError(err)}`,
-      );
+      logger.warn(`Auto-connect: TikTok-Live-Connector failed: ${parseError(err)}`);
     }
 
     // ── Attempt 2: Euler fallback ──
     if (!config.connection.fallbackEnabled) {
       throw new Error(
-        "TikTok-Live-Connector failed and fallback is disabled. " +
-          `Reason: ${parseError(connectorError)}`,
+        "TikTok-Live-Connector failed and fallback is disabled. " + `Reason: ${parseError(connectorError)}`,
       );
     }
 
-    logger.connection(
-      `Auto-connect: falling back to Euler WebSocket API for @${uniqueId}…`,
-    );
+    logger.connection(`Auto-connect: falling back to Euler WebSocket API for @${uniqueId}…`);
 
     try {
       this.throwIfAborted();
@@ -271,8 +253,7 @@ export class ConnectionManager {
       logger.success("Auto-connect: connected via Euler WebSocket API (fallback)");
 
       this.wsService.broadcast("toast", {
-        message:
-          "Connected via Euler fallback (TikTok-Live-Connector was unavailable)",
+        message: "Connected via Euler fallback (TikTok-Live-Connector was unavailable)",
         type: "warning",
       });
     } catch (eulerError: unknown) {
@@ -297,10 +278,7 @@ export class ConnectionManager {
   /**
    * Marks the connection as successfully established.
    */
-  private markConnected(
-    method: ConnectionState["activeMethod"],
-    fallbackUsed?: boolean,
-  ): void {
+  private markConnected(method: ConnectionState["activeMethod"], fallbackUsed?: boolean): void {
     this.updateState({
       activeMethod: method,
       status: "connected",
